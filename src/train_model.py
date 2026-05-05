@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import joblib
 
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score,
     f1_score, roc_auc_score, confusion_matrix, classification_report,
@@ -198,47 +198,38 @@ def split(X, y):
 # 3. TRAIN
 # ─────────────────────────────────────────────────────────────────────────────
 
-def train_all(X_train, y_train) -> dict:
-    try:
-        from imblearn.over_sampling import SMOTE
-    except ImportError:
-        SMOTE = None
+TRAIN_SAMPLE_CAP = 100000
 
-    if SMOTE is not None:
-        smote = SMOTE(random_state=RANDOM_STATE)
-        X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
-        log.info("SMOTE applied: %d -> %d samples", len(X_train), len(X_train_res))
-    else:
-        X_train_res, y_train_res = X_train, y_train
-        log.warning("imblearn not installed; training without SMOTE.")
+def train_all(X_train, y_train) -> dict:
+    if len(X_train) > TRAIN_SAMPLE_CAP:
+        sample_idx = X_train.sample(n=TRAIN_SAMPLE_CAP, random_state=RANDOM_STATE).index
+        X_train = X_train.loc[sample_idx]
+        y_train = y_train.loc[sample_idx]
+        log.info("Training sample capped: %d -> %d rows", len(sample_idx), len(X_train))
+
+    X_train_res, y_train_res = X_train, y_train
 
     counter = Counter(y_train_res)
     scale_pos_weight = counter[0] / counter[1]
 
     xgb_base = XGBClassifier(
         scale_pos_weight=scale_pos_weight,
-        eval_metric="aucpr",  # BEST for imbalance
+        eval_metric="aucpr",
+        n_estimators=XGB_PARAMS["n_estimators"],
+        max_depth=XGB_PARAMS["max_depth"],
+        learning_rate=XGB_PARAMS["learning_rate"],
+        subsample=XGB_PARAMS["subsample"],
+        colsample_bytree=XGB_PARAMS["colsample_bytree"],
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
     )
-    xgb_param_grid = {
-        "n_estimators": [150, 200],
-        "max_depth": [4, 6],
-        "learning_rate": [0.05, 0.1],
-    }
-    xgb_grid = GridSearchCV(
-        estimator=xgb_base,
-        param_grid=xgb_param_grid,
-        scoring="recall",
-        cv=3,
-        n_jobs=1,
-        verbose=0,
-    )
-    xgb_grid.fit(X_train_res, y_train_res)
-    log.info("Best XGBoost params (recall): %s", xgb_grid.best_params_)
+    xgb_base.fit(X_train_res, y_train_res)
+    log.info("Trained XGBoost with fixed config from utils.config")
 
     candidates = {
-        "logistic_regression": LogisticRegression(max_iter=5000, solver="saga", random_state=RANDOM_STATE),
-        "random_forest":       RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1),
-        "xgboost":             xgb_grid.best_estimator_,
+        "logistic_regression": LogisticRegression(max_iter=5000, solver="saga", class_weight="balanced", random_state=RANDOM_STATE),
+        "random_forest":       RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1, class_weight="balanced_subsample"),
+        "xgboost":             xgb_base,
     }
     trained = {}
     for name, model in candidates.items():

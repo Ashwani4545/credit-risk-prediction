@@ -67,14 +67,14 @@ class LoanModelExplainer:
         self.shap = importlib.import_module("shap") if self.has_shap else None
 
         if self.has_shap:
-            # Use TreeExplainer for tree-based models (XGBoost, RF) — much faster
-            # than the generic shap.Explainer which may use slow KernelSHAP.
-            try:
-                self.explainer = self.shap.TreeExplainer(self.model)
-                log.info("SHAP TreeExplainer initialised ✅ (fast path)")
-            except Exception:
-                self.explainer = self.shap.Explainer(self.model)
-                log.info("SHAP generic Explainer initialised ✅ (fallback)")
+            # Delay explainer construction until we have data available.
+            # Some SHAP explainers (e.g., generic Explainer) require a masker/background
+            # dataset to be provided at construction time — creating the explainer
+            # here (without data) caused errors for non-tree models like
+            # `LogisticRegression`. We'll build the explainer in
+            # `generate_shap_values` when we have the input DataFrame.
+            self.explainer = None
+            log.info("SHAP available — explainer will be initialised when data is provided")
         else:
             self.explainer = None
             log.warning("SHAP is not installed; using feature-importance fallback for explanations.")
@@ -138,7 +138,31 @@ class LoanModelExplainer:
             return None
 
         log.info("Computing SHAP values for %d samples …", len(X))
-        return self.explainer(X)
+
+        # Ensure explainer exists and is appropriate for the model/data.
+        if self.explainer is None:
+            # Prefer TreeExplainer for tree-based models when possible.
+            try:
+                self.explainer = self.shap.TreeExplainer(self.model)
+                log.info("SHAP TreeExplainer initialised ✅ (fast path)")
+            except Exception:
+                # For linear / scikit-learn models, the generic Explainer
+                # requires a background dataset; pass `X` so it can choose
+                # an appropriate internal explainer (LinearExplainer, etc.).
+                try:
+                    self.explainer = self.shap.Explainer(self.model, X)
+                    log.info("SHAP generic Explainer initialised ✅ (data-backed fallback)")
+                except Exception:
+                    # As a last resort, avoid raising and return None so
+                    # the rest of the pipeline can continue with fallbacks.
+                    log.exception("Failed to initialise any SHAP explainer; skipping SHAP")
+                    return None
+
+        try:
+            return self.explainer(X)
+        except Exception:
+            log.exception("Error when computing SHAP values; returning None")
+            return None
 
     def explain_single(self, input_df: pd.DataFrame):
         if self.has_shap:
