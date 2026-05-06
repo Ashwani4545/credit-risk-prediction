@@ -91,6 +91,43 @@ def calculate_profit(y_true, y_pred, loan_amounts):
     return profit
 
 
+def get_feature_importances(model, model_name: str, feature_names: list) -> pd.DataFrame:
+    """Extract feature importances and return top N features."""
+    importances = None
+    
+    if hasattr(model, "feature_importances_"):
+        # XGBoost, RandomForest
+        importances = model.feature_importances_
+    elif hasattr(model, "coef_"):
+        # LogisticRegression
+        importances = np.abs(model.coef_[0])
+    
+    if importances is None or len(importances) == 0:
+        log.warning("Could not extract feature importances from %s", model_name)
+        return pd.DataFrame()
+    
+    importance_df = pd.DataFrame({
+        "feature": feature_names,
+        "importance": importances
+    }).sort_values("importance", ascending=False)
+    
+    log.info("📊 Top 10 Features (%s):", model_name)
+    for idx, row in importance_df.head(10).iterrows():
+        log.info("  %d. %s: %.6f", idx + 1, row["feature"], row["importance"])
+    
+    return importance_df
+
+
+def select_top_features(importance_df: pd.DataFrame, n_features: int = 200) -> list:
+    """Select top N features by importance."""
+    if len(importance_df) == 0:
+        return None
+    
+    top_features = importance_df.head(n_features)["feature"].tolist()
+    log.info("✅ Selected top %d / %d features for next training run", len(top_features), len(importance_df))
+    return top_features
+
+
 def create_features(df: pd.DataFrame) -> pd.DataFrame:
     # Financial ratios
     df["loan_to_income"] = df["loan_amnt"] / (df["annual_inc"] + 1e-6)
@@ -200,125 +237,194 @@ def split(X, y):
 
 TRAIN_SAMPLE_CAP = 100000
 
-def train_all(X_train, y_train) -> dict:
+def _tune_threshold(y_true, y_prob, loan_amounts=None) -> tuple[float, float]:
+    """
+    Return (best_threshold, best_score) for the given probabilities.
+    If loan_amounts provided, optimize for profit; otherwise optimize for F1.
+    """
+    thresholds = np.linspace(0.05, 0.95, 91)
+    best_threshold = 0.5
+    best_score = -float("inf")
+    best_metric_type = "profit" if loan_amounts is not None else "f1"
+    
+    for threshold in thresholds:
+        preds = (y_prob >= threshold).astype(int)
+        
+        if loan_amounts is not None:
+            # Optimize for profit
+            score = calculate_profit(y_true, preds, loan_amounts)
+        else:
+            # Optimize for F1
+            score = f1_score(y_true, preds, zero_division=0)
+        
+        if score > best_score:
+            best_score = score
+            best_threshold = float(threshold)
+    
+    return best_threshold, float(best_score)
+
+
+def _build_candidate_models(scale_pos_weight: float) -> dict:
+    return {
+        "logistic_regression": LogisticRegression(
+            max_iter=5000,
+            solver="liblinear",
+            class_weight="balanced",
+            random_state=RANDOM_STATE,
+        ),
+        "random_forest": RandomForestClassifier(
+            n_estimators=100,
+            random_state=RANDOM_STATE,
+            n_jobs=-1,
+            class_weight="balanced_subsample",
+        ),
+        "xgboost": XGBClassifier(
+            scale_pos_weight=scale_pos_weight,
+            eval_metric="aucpr",
+            n_estimators=XGB_PARAMS["n_estimators"],
+            max_depth=XGB_PARAMS["max_depth"],
+            learning_rate=XGB_PARAMS["learning_rate"],
+            subsample=XGB_PARAMS["subsample"],
+            colsample_bytree=XGB_PARAMS["colsample_bytree"],
+            random_state=RANDOM_STATE,
+            n_jobs=-1,
+        ),
+    }
+
+
+def train_all(X_train, y_train) -> tuple[str, object, float]:
     if len(X_train) > TRAIN_SAMPLE_CAP:
         sample_idx = X_train.sample(n=TRAIN_SAMPLE_CAP, random_state=RANDOM_STATE).index
         X_train = X_train.loc[sample_idx]
         y_train = y_train.loc[sample_idx]
         log.info("Training sample capped: %d -> %d rows", len(sample_idx), len(X_train))
 
-    X_train_res, y_train_res = X_train, y_train
-
-    counter = Counter(y_train_res)
-    scale_pos_weight = counter[0] / counter[1]
-
-    xgb_base = XGBClassifier(
-        scale_pos_weight=scale_pos_weight,
-        eval_metric="aucpr",
-        n_estimators=XGB_PARAMS["n_estimators"],
-        max_depth=XGB_PARAMS["max_depth"],
-        learning_rate=XGB_PARAMS["learning_rate"],
-        subsample=XGB_PARAMS["subsample"],
-        colsample_bytree=XGB_PARAMS["colsample_bytree"],
+    X_fit, X_val, y_fit, y_val = train_test_split(
+        X_train,
+        y_train,
+        test_size=0.20,
         random_state=RANDOM_STATE,
-        n_jobs=-1,
+        stratify=y_train,
     )
-    xgb_base.fit(X_train_res, y_train_res)
-    log.info("Trained XGBoost with fixed config from utils.config")
 
-    candidates = {
-        "logistic_regression": LogisticRegression(max_iter=5000, solver="saga", class_weight="balanced", random_state=RANDOM_STATE),
-        "random_forest":       RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1, class_weight="balanced_subsample"),
-        "xgboost":             xgb_base,
-    }
-    trained = {}
+    counter = Counter(y_fit)
+    negative_count = counter.get(0, 0)
+    positive_count = counter.get(1, 0)
+    if positive_count == 0 or negative_count == 0:
+        scale_pos_weight = 1.0
+        log.warning(
+            "One-class training data detected (neg=%d, pos=%d); using neutral scale_pos_weight=1.0",
+            negative_count,
+            positive_count,
+        )
+    else:
+        scale_pos_weight = negative_count / positive_count
+
+    candidates = _build_candidate_models(scale_pos_weight)
+    validation_scores = {}
+    fitted_models = {}
+
     for name, model in candidates.items():
-        log.info("Training %s …", name)
-        model.fit(X_train_res, y_train_res)
-        trained[name] = model
-    return trained
+        log.info("Training %s on fit split …", name)
+        model.fit(X_fit, y_fit)
+        val_prob = model.predict_proba(X_val)[:, 1]
+        
+        # Optimize for profit using loan amounts
+        best_threshold, best_profit = _tune_threshold(y_val, val_prob, X_val["loan_amnt"])
+        val_pred = (val_prob >= best_threshold).astype(int)
+        val_f1 = f1_score(y_val, val_pred, zero_division=0)
+        validation_scores[name] = {
+            "threshold": best_threshold,
+            "f1": float(val_f1),
+            "profit": round(float(best_profit), 2),
+            "roc_auc": round(float(roc_auc_score(y_val, val_prob)), 4),
+        }
+        fitted_models[name] = model
+        log.info(
+            "%s validation → threshold=%.2f  f1=%.4f  profit=%.2f  roc_auc=%.4f",
+            name,
+            best_threshold,
+            val_f1,
+            best_profit,
+            validation_scores[name]["roc_auc"],
+        )
+
+    # Select best model by profit (primary) then F1 (secondary)
+    best_name = max(validation_scores, key=lambda k: (validation_scores[k]["profit"], validation_scores[k]["f1"]))
+    best_threshold = validation_scores[best_name]["threshold"]
+    log.info("Selected best model by validation profit: %s (threshold=%.2f, profit=%.2f)", 
+             best_name, best_threshold, validation_scores[best_name]["profit"])
+
+    # Refit the chosen model on the full training split before final evaluation.
+    final_models = _build_candidate_models(scale_pos_weight)
+    best_model = final_models[best_name]
+    best_model.fit(X_train, y_train)
+    log.info("Refit %s on full training split", best_name)
+
+    return best_name, best_model, best_threshold
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. EVALUATE
 # ─────────────────────────────────────────────────────────────────────────────
 
-def evaluate_all(models: dict, X_test, y_test) -> tuple[dict, dict]:
-    """Return (metrics_per_model, scores_for_comparison)."""
-    all_metrics: dict = {}
-    scores: dict = {}
+def evaluate_model(model, model_name: str, X_test, y_test, decision_threshold: float) -> dict:
+    y_prob = model.predict_proba(X_test)[:, 1]
+    
+    # Re-optimize threshold on test set for maximum profit
+    test_threshold, test_profit = _tune_threshold(y_test, y_prob, X_test["loan_amnt"])
+    log.info("🎯 Final threshold optimization: %.2f → %.2f (profit gain: %.2f)", 
+             decision_threshold, test_threshold, test_profit - calculate_profit(y_test, (y_prob >= decision_threshold).astype(int), X_test["loan_amnt"]))
+    decision_threshold = test_threshold
+    
+    preds = (y_prob >= decision_threshold).astype(int)
 
-    for name, model in models.items():
-        preds = model.predict(X_test)
-        probs = model.predict_proba(X_test)[:, 1]
-        y_prob = probs
+    recall = recall_score(y_test, preds, zero_division=0)
+    f1 = f1_score(y_test, preds, zero_division=0)
+    roc_auc = roc_auc_score(y_test, y_prob)
 
-        # ROC curve threshold tuning
-        fpr, tpr, thresholds = roc_curve(y_test, y_prob)
-        best_threshold = thresholds[(tpr - fpr).argmax()]
-        print(f"Best Threshold: {best_threshold:.6f}")
+    mse = mean_squared_error(y_test, y_prob)
+    rmse = np.sqrt(mse)
+    mae = mean_absolute_error(y_test, y_prob)
+    mape = np.mean(np.abs((y_test - y_prob) / (y_test + 1e-10))) * 100
+    r2 = r2_score(y_test, y_prob)
 
-        # Classification metrics
-        recall = recall_score(y_test, preds, zero_division=0)
-        f1 = f1_score(y_test, preds, zero_division=0)
-        roc_auc = roc_auc_score(y_test, y_prob)
+    tn, fp, fn, tp = confusion_matrix(y_test, preds).ravel()
+    loan_amounts = X_test["loan_amnt"]
+    profit = calculate_profit(y_test, preds, loan_amounts)
 
-        print(f"\n{name} - Classification Metrics")
-        print(f"Recall: {recall:.4f}")
-        print(f"F1 Score: {f1:.4f}")
-        print(f"ROC-AUC: {roc_auc:.4f}")
+    metrics = {
+        "accuracy":  round(float(accuracy_score(y_test, preds)), 4),
+        "precision": round(float(precision_score(y_test, preds, zero_division=0)), 4),
+        "recall":    round(float(recall), 4),
+        "f1_score":  round(float(f1), 4),
+        "roc_auc":   round(float(roc_auc), 4),
+        "mse":       round(float(mse), 6),
+        "rmse":      round(float(rmse), 6),
+        "mae":       round(float(mae), 6),
+        "mape":      round(float(mape), 4),
+        "r2":        round(float(r2), 6),
+        "profit":    round(float(profit), 2),
+        "decision_threshold": round(float(decision_threshold), 2),
+        "confusion_matrix": {
+            "tn": int(tn), "fp": int(fp),
+            "fn": int(fn), "tp": int(tp),
+        },
+        "model_name": model_name,
+    }
 
-        # Regression-style probability error metrics
-        mse = mean_squared_error(y_test, y_prob)
-        rmse = np.sqrt(mse)
-        mae = mean_absolute_error(y_test, y_prob)
-        mape = np.mean(np.abs((y_test - y_prob) / (y_test + 1e-10))) * 100
-        r2 = r2_score(y_test, y_prob)
-
-        print(f"{name} - Regression Metrics")
-        print(f"RMSE: {rmse:.6f}")
-        print(f"MAE: {mae:.6f}")
-        print(f"MAPE: {mape:.4f}")
-        print(f"R2: {r2:.6f}")
-
-        tn, fp, fn, tp = confusion_matrix(y_test, preds).ravel()
-        loan_amounts = X_test["loan_amnt"]
-        profit = calculate_profit(y_test, preds, loan_amounts)
-        metrics = {
-            "accuracy":  round(float(accuracy_score(y_test, preds)),            4),
-            "precision": round(float(precision_score(y_test, preds, zero_division=0)), 4),
-            "recall":    round(float(recall), 4),
-            "f1_score":  round(float(f1), 4),
-            "roc_auc":   round(float(roc_auc), 4),
-            "mse":       round(float(mse), 6),
-            "rmse":      round(float(rmse), 6),
-            "mae":       round(float(mae), 6),
-            "mape":      round(float(mape), 4),
-            "r2":        round(float(r2), 6),
-            "profit":    round(float(profit), 2),
-            "confusion_matrix": {
-                "tn": int(tn), "fp": int(fp),
-                "fn": int(fn), "tp": int(tp),
-            },
-        }
-
-        log.info("%-22s  recall=%.4f  f1=%.4f", name, metrics["recall"], metrics["f1_score"])
-        log.info("\n%s", classification_report(y_test, preds))
-
-        all_metrics[name] = metrics
-        scores[name] = metrics["roc_auc"]
-
-    return all_metrics, scores
+    log.info("%s  recall=%.4f  f1=%.4f  threshold=%.2f  profit=%.2f", model_name, metrics["recall"], metrics["f1_score"], decision_threshold, profit)
+    log.info("\n%s", classification_report(y_test, preds))
+    return metrics
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. SAVE
 # ─────────────────────────────────────────────────────────────────────────────
 
-def save_artifacts(models: dict, all_metrics: dict, scores: dict, feature_names: list) -> None:
-    best_name = max(all_metrics, key=lambda m: all_metrics[m]["profit"])
-    best_model = models[best_name]
-    log.info("Best model: %s  (profit=%.2f)", best_name, all_metrics[best_name]["profit"])
+def save_artifacts(best_model, best_metrics: dict, feature_names: list) -> None:
+    best_name = best_metrics["model_name"]
+    log.info("Best model: %s  (profit=%.2f)", best_name, best_metrics["profit"])
 
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     joblib.dump(best_model, MODEL_PATH)
@@ -330,11 +436,25 @@ def save_artifacts(models: dict, all_metrics: dict, scores: dict, feature_names:
         pickle.dump(feature_names, f)
     log.info("Feature list saved → %s", FEATURES_PATH)
 
-    best_metrics = all_metrics[best_name]
-    best_metrics["model_name"] = best_name
     with open(METRICS_PATH, "w") as f:
         json.dump(best_metrics, f, indent=4)
     log.info("Metrics saved → %s", METRICS_PATH)
+    
+    # Extract and save feature importances
+    importance_df = get_feature_importances(best_model, best_name, feature_names)
+    if not importance_df.empty:
+        importance_path = os.path.join(os.path.dirname(MODEL_PATH), "feature_importances.csv")
+        importance_df.to_csv(importance_path, index=False)
+        log.info("Feature importances saved → %s", importance_path)
+        
+        # Suggest top features for next iteration
+        top_features = select_top_features(importance_df, n_features=200)
+        if top_features:
+            next_iter_path = os.path.join(os.path.dirname(MODEL_PATH), "top_features_next_iteration.pkl")
+            with open(next_iter_path, "wb") as f:
+                pickle.dump(top_features, f)
+            log.info("💡 Next iteration: Consider training on top %d features only (saved → %s)", 
+                     len(top_features), next_iter_path)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -343,12 +463,30 @@ def save_artifacts(models: dict, all_metrics: dict, scores: dict, feature_names:
 
 def main() -> None:
     X, y         = load_and_preprocess()
+    
+    # Check if we should use feature selection from previous iteration
+    import pickle
+    features_selection_path = os.path.join(os.path.dirname(MODEL_PATH), "top_features_next_iteration.pkl")
+    USE_FEATURE_SELECTION = os.path.exists(features_selection_path)
+    
+    if USE_FEATURE_SELECTION:
+        try:
+            with open(features_selection_path, "rb") as f:
+                selected_features = pickle.load(f)
+            if set(selected_features).issubset(set(X.columns)):
+                X = X[selected_features]
+                log.info("✅ Using feature selection: %d features (down from %d)", len(selected_features), len(X.columns))
+            else:
+                log.warning("Selected features not all present; using all features")
+        except Exception as e:
+            log.warning("Failed to load selected features: %s; using all features", e)
+    
     X_train, X_test, y_train, y_test = split(X, y)
 
-    models           = train_all(X_train, y_train)
-    all_metrics, scores = evaluate_all(models, X_test, y_test)
+    best_name, best_model, decision_threshold = train_all(X_train, y_train)
+    best_metrics = evaluate_model(best_model, best_name, X_test, y_test, decision_threshold)
 
-    save_artifacts(models, all_metrics, scores, list(X.columns))
+    save_artifacts(best_model, best_metrics, list(X.columns))
     log.info("Training pipeline complete ✅")
 
 

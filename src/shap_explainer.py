@@ -81,6 +81,12 @@ class LoanModelExplainer:
 
     def _fallback_importances(self, columns: pd.Index) -> np.ndarray:
         try:
+            if hasattr(self.model, "coef_"):
+                coef = np.asarray(self.model.coef_, dtype=float)
+                if coef.ndim == 2:
+                    coef = coef[0]
+                if len(coef) == len(columns):
+                    return np.abs(coef)
             if hasattr(self.model, "feature_importances_"):
                 importances = np.asarray(self.model.feature_importances_, dtype=float)
                 if len(importances) == len(columns):
@@ -165,11 +171,26 @@ class LoanModelExplainer:
             return None
 
     def explain_single(self, input_df: pd.DataFrame):
-        if self.has_shap:
-            shap_values = self.explainer(input_df)
-            importance = np.abs(shap_values.values[0])
+        shap_values = None
+
+        if self.has_shap and self.explainer is not None:
+            try:
+                shap_values = self.explainer(input_df)
+                importance = np.abs(shap_values.values[0])
+            except Exception:
+                log.exception("SHAP explanation failed; using fallback importances")
+                importance = np.abs(self._fallback_importances(input_df.columns))
         else:
-            importance = np.abs(self._fallback_importances(input_df.columns))
+            if hasattr(self.model, "coef_"):
+                coef = np.asarray(self.model.coef_, dtype=float)
+                if coef.ndim == 2:
+                    coef = coef[0]
+                if len(coef) == len(input_df.columns):
+                    importance = np.abs(coef * input_df.iloc[0].to_numpy(dtype=float))
+                else:
+                    importance = np.abs(self._fallback_importances(input_df.columns))
+            else:
+                importance = np.abs(self._fallback_importances(input_df.columns))
 
         # Get top 5 important features
         feature_names = input_df.columns

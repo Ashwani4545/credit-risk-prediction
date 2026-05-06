@@ -95,6 +95,8 @@ def _load_metrics() -> dict:
     defaults = {
         "accuracy": 0.0, "precision": 0.0, "recall": 0.0,
         "f1_score": 0.0, "roc_auc": 0.0,
+        "decision_threshold": 0.5,
+        "model_name": "unknown",
         "confusion_matrix": {"tn": 0, "fp": 0, "fn": 0, "tp": 0},
     }
     try:
@@ -106,6 +108,8 @@ def _load_metrics() -> dict:
             "recall":    float(data.get("recall",    0)),
             "f1_score":  float(data.get("f1_score",  0)),
             "roc_auc":   float(data.get("roc_auc",   0)),
+            "decision_threshold": float(data.get("decision_threshold", 0.5)),
+            "model_name": str(data.get("model_name", "unknown")),
             "confusion_matrix": {
                 "tn": int(data.get("confusion_matrix", {}).get("tn", 0)),
                 "fp": int(data.get("confusion_matrix", {}).get("fp", 0)),
@@ -236,12 +240,16 @@ _CATEGORICAL_FIELDS = [
 
 
 def create_features_live(df: pd.DataFrame) -> pd.DataFrame:
+    def _safe_div(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
+        denominator = denominator.replace(0, 1e-6).fillna(1e-6)
+        return numerator.fillna(0.0) / denominator
+
     # ── Ratio features ───────────────────────────────────────────────────────
-    df["loan_to_income"]        = df["loan_amnt"] / (df["annual_inc"] + 1e-6)
-    df["installment_to_income"] = df["installment"] / (df["annual_inc"] + 1e-6)
+    df["loan_to_income"]        = _safe_div(df["loan_amnt"], df["annual_inc"])
+    df["installment_to_income"] = _safe_div(df["installment"], df["annual_inc"])
 
     # ── Credit utilization (FIX: matches train_model.py formula) ─────────────
-    df["credit_utilization"] = df["revol_bal"] / (df["revol_bal"] + df["bc_open_to_buy"] + 1e-6)
+    df["credit_utilization"] = _safe_div(df["revol_bal"], df["revol_bal"] + df["bc_open_to_buy"])
 
     # ── Binary risk flags ─────────────────────────────────────────────────────
     df["high_dti_flag"]           = (df["dti"] > 20).astype(int)
@@ -255,14 +263,14 @@ def create_features_live(df: pd.DataFrame) -> pd.DataFrame:
     # ── Preprocessing features (FIX: these 6 features from data_preprocessing.py's
     #    engineer_features() were missing at inference, staying at 0.0 and causing
     #    wrong prediction probabilities — train/serve skew) ────────────────────
-    df["loan_income_ratio"]        = df["loan_amnt"]    / (df["annual_inc"].replace(0, float("nan")) + 1)
-    df["revol_income_ratio"]       = df["revol_bal"]    / (df["annual_inc"].replace(0, float("nan")) + 1)
-    df["open_acc_ratio"]           = df["open_acc"]     / (df["total_acc"].replace(0, float("nan")) + 1)
-    df["installment_income_ratio"] = df["installment"]  / (df["annual_inc"].replace(0, float("nan")) + 1)
+    df["loan_income_ratio"]        = _safe_div(df["loan_amnt"], df["annual_inc"] + 1)
+    df["revol_income_ratio"]       = _safe_div(df["revol_bal"], df["annual_inc"] + 1)
+    df["open_acc_ratio"]           = _safe_div(df["open_acc"], df["total_acc"] + 1)
+    df["installment_income_ratio"] = _safe_div(df["installment"], df["annual_inc"] + 1)
     df["fico_avg"]                 = (df["fico_range_low"] + df["fico_range_high"]) / 2
     df["risk_score"]               = df["int_rate"] * df["dti"]
 
-    return df
+    return df.fillna(0.0)
 
 
 def add_economic_features(df):
@@ -327,7 +335,7 @@ def preprocess_input(form_data: dict) -> pd.DataFrame:
                 break
 
     df = pd.DataFrame([row])[MODEL_FEATURES].astype("float32")
-    return df
+    return df.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
 
 def _validate_input(form_data: dict) -> list:
@@ -459,15 +467,17 @@ def predict():
         sensitive_warning = EXPLAINER.validate_sensitive_features(form_data)
 
         # Inference — class probability for default risk (PD)
-        input_data = input_df
+        input_data = input_df.replace([np.inf, -np.inf], 0.0).fillna(0.0)
         if SCALER is not None:
             input_data = SCALER.transform(input_data)
+            input_data = np.nan_to_num(input_data, nan=0.0, posinf=0.0, neginf=0.0)
             log.debug("Scaler applied")
 
         prob        = float(MODEL.predict_proba(input_data)[0][1])
         probability = prob
         log.info("Probability of default: %.4f", prob)
-        threshold = 0.4
+        threshold = float(METRICS.get("decision_threshold", 0.5))
+        predicted_default = prob >= threshold
 
         pd_value = probability
         loan_amount = float(form_data.get("loan_amnt", 0) or 0)
@@ -495,12 +505,15 @@ def predict():
         else:
             risk_info    = get_risk_level(prob)   # from utils/config.py — canonical thresholds
             risk_label_v = risk_info["label"]     # e.g. "LOW RISK", "MEDIUM RISK", etc.
-            if risk_label_v == "LOW RISK":
+            if predicted_default:
+                if risk_label_v == "LOW RISK":
+                    risk, verdict, show_warning = "Medium Risk", "Review", True
+                elif risk_label_v == "MEDIUM RISK":
+                    risk, verdict, show_warning = "Medium Risk", "Review", True
+                else:  # HIGH RISK / VERY HIGH RISK
+                    risk, verdict, show_warning = "High Risk", "Default", True
+            else:
                 risk, verdict, show_warning = "Low Risk", "Repay", False
-            elif risk_label_v == "MEDIUM RISK":
-                risk, verdict, show_warning = "Medium Risk", "Review", True
-            else:  # HIGH RISK / VERY HIGH RISK
-                risk, verdict, show_warning = "High Risk", "Default", True
 
         prediction   = verdict
         decision     = verdict
@@ -555,6 +568,7 @@ def predict():
             "expected_profit": round(expected_profit, 2),
             "model_version": "v1.0",
             "decision_threshold": threshold,
+            "threshold_used": threshold,
             "features_used": list(input_df.columns),
             "top_features": explanation,
             "fairness_check": fairness_flag,

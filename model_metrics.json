@@ -1,20 +1,21 @@
 {
-    "accuracy": 0.3099,
-    "precision": 0.2144,
-    "recall": 0.9205,
-    "f1_score": 0.3478,
-    "roc_auc": 0.611,
-    "mse": 0.251319,
-    "rmse": 0.501317,
-    "mae": 0.501293,
-    "mape": 402098505885.3876,
-    "r2": -0.571334,
-    "profit": -1053642.5,
+    "accuracy": 0.4279,
+    "precision": 0.2501,
+    "recall": 0.9316,
+    "f1_score": 0.3943,
+    "roc_auc": 0.7409,
+    "mse": 0.20286,
+    "rmse": 0.4504,
+    "mae": 0.407377,
+    "mape": 323314297192.444,
+    "r2": -0.268349,
+    "profit": 4908832.5,
+    "decision_threshold": 0.28,
     "confusion_matrix": {
-        "tn": 3776,
-        "fp": 20227,
-        "fn": 477,
-        "tp": 5520
+        "tn": 7250,
+        "fp": 16753,
+        "fn": 410,
+        "tp": 5587
     },
-    "model_name": "logistic_regression"
+    "model_name": "xgboost"
 }

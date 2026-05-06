@@ -1,0 +1,18 @@
+
+    ===== Loan Risk Report =====
+    
+    Borrower: 
+    Loan Amount: 50000.0
+    
+    Probability of Default (PD): 23.35%
+    Risk Level: LOW RISK
+    
+    Decision: Repay
+    
+    Key Factors:
+    
+ - int_rate: impact 0.0943
+ - grade_B: impact 0.0921
+ - term__60_months: impact 0.056
+ - risk_score: impact 0.0114
+ - home_ownership_MORTGAGE: impact 0.0082

@@ -1,6 +1,6 @@
 {% extends "base.html" %} {% block title %}Assessment Result{% endblock %} {%
-block content %}
-{% set risk_color = '#22c55e' if risk == 'LOW RISK' else ('#f59e0b' if risk == 'MEDIUM RISK' else '#f97316') %}
+block content %} {% set risk_color = '#22c55e' if risk == 'LOW RISK' else
+('#f59e0b' if risk == 'MEDIUM RISK' else '#f97316') %}
 <div class="hero hero--result">
   <div class="hero-inner">
     <div class="hero-pill">✅ Assessment Complete</div>
@@ -12,7 +12,9 @@ block content %}
   <!-- ── MAIN VERDICT CARD ───────────────────────────────────────────────── -->
   <div class="verdict-card" style="--risk-color: {{ risk_color }}">
     <div class="verdict-header">
-      <div class="verdict-name">{{ borrower if borrower else 'Loan Applicant' }}</div>
+      <div class="verdict-name">
+        {{ borrower if borrower else 'Loan Applicant' }}
+      </div>
       <time class="verdict-ts">Instant Assessment</time>
     </div>
 
@@ -75,18 +77,21 @@ block content %}
       <!-- Risk badge -->
       <div
         class="risk-badge"
-        style="color: var(--risk-color); border-color: color-mix(in srgb, var(--risk-color) 20%, transparent); background: color-mix(in srgb, var(--risk-color) 12%, transparent)"
+        style="
+          color: var(--risk-color);
+          border-color: color-mix(in srgb, var(--risk-color) 20%, transparent);
+          background: color-mix(in srgb, var(--risk-color) 12%, transparent);
+        "
       >
         {% if show_warning %}⚠️{% else %}✅{% endif %} {{ risk }}
       </div>
 
       <!-- Verdict line -->
-      <div class="verdict-line {% if show_warning %}verdict-risk{% else %}verdict-safe{% endif %}">
-        {% if show_warning %}
-        Default Risk Detected — Enhanced Review Required
-        {% else %}
-        Safe Borrower — No Immediate Risk
-        {% endif %}
+      <div
+        class="verdict-line {% if show_warning %}verdict-risk{% else %}verdict-safe{% endif %}"
+      >
+        {% if show_warning %} Default Risk Detected — Enhanced Review Required
+        {% else %} Safe Borrower — No Immediate Risk {% endif %}
       </div>
     </div>
   </div>
@@ -103,7 +108,9 @@ block content %}
     </div>
     <div class="detail-card">
       <div class="dc-label">Warning State</div>
-      <div class="dc-value">{{ "Review Needed" if show_warning else "No Warning" }}</div>
+      <div class="dc-value">
+        {{ "Review Needed" if show_warning else "No Warning" }}
+      </div>
     </div>
     <div class="detail-card">
       <div class="dc-label">Recommendation</div>
@@ -112,41 +119,81 @@ block content %}
   </div>
 
   <!-- ── SHAP EXPLANATION ─────────────────────────────────────────────── -->
-  {% if top_features %}
-
-  {# Emit bar widths/colours as a proper <style> block so the CSS linter   #}
-  {# never sees Jinja2 {{ }} tokens inside a style="" attribute.           #}
+  {% if top_features %} {# Emit bar widths/colours as a proper
   <style>
-    {% for feat in top_features %}
-    {% set bar_pct = [((feat.impact / top_features[0].impact) * 100) | round(0) | int, 4] | max %}
-    .shap-bar-{{ loop.index }} {
-      width: {{ bar_pct }}%;
-      background: {{ risk_color }};
-    }
-    .shap-value-{{ loop.index }} { color: {{ risk_color }}; }
-    {% endfor %}
+    block so the CSS parser #}
+     {# never sees Jinja2 tokens inside inline attributes. #}
+     <style>
+       {% set top_impact = (top_features[0].impact | abs) if (top_features[0].impact | abs) > 1e-9 else 1.0 %}
+       {% for feat in top_features %}
+       {% set bar_pct = [((feat.impact | abs) / top_impact * 100) | round(0) | int, 4] | max %}
+       .shap-bar-{{ loop.index }} {
+         width: {{ bar_pct }}%;
+         background: {{ risk_color }};
+       }
+       .shap-value-{{ loop.index }} { color: {{ risk_color }}; }
+       {% endfor %}
   </style>
 
-  <div class="form-card" style="margin-top:1.5rem;">
-    <h3 class="section-head"><span class="section-num">🔍</span> Why this decision? — Top Driving Factors</h3>
-    <p style="color:rgba(255,255,255,0.5);font-size:0.85rem;margin-bottom:1rem;">
-      SHAP values show the contribution of each feature to the default probability.
-      Higher impact = stronger influence on the prediction.
+  <div class="form-card" style="margin-top: 1.5rem">
+    <h3 class="section-head">
+      <span class="section-num">🔍</span> Why this decision? — Top Driving
+      Factors
+    </h3>
+    <p
+      style="
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.85rem;
+        margin-bottom: 1rem;
+      "
+    >
+      SHAP values show the contribution of each feature to the default
+      probability. Higher impact = stronger influence on the prediction.
     </p>
-    <div style="display:flex;flex-direction:column;gap:0.6rem;">
+    <div style="display: flex; flex-direction: column; gap: 0.6rem">
       {% for feat in top_features %}
-      <div style="display:flex;align-items:center;gap:0.8rem;">
-        <div style="min-width:180px;font-size:0.85rem;color:rgba(255,255,255,0.8);font-family:monospace;">
+      <div style="display: flex; align-items: center; gap: 0.8rem">
+        <div
+          style="
+            min-width: 180px;
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.8);
+            font-family: monospace;
+          "
+        >
           {{ feat.feature | replace('_',' ') | title }}
         </div>
-        <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:6px;height:10px;overflow:hidden;">
+        <div
+          style="
+            flex: 1;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 6px;
+            height: 10px;
+            overflow: hidden;
+          "
+        >
           <!-- bar fill: width + colour come from the style block above -->
-          <div class="shap-bar shap-bar-{{ loop.index }}"
-               style="height:100%;border-radius:6px;transition:width 0.8s ease;"
-               aria-hidden="true">&nbsp;</div>
+          <div
+            class="shap-bar shap-bar-{{ loop.index }}"
+            style="
+              height: 100%;
+              border-radius: 6px;
+              transition: width 0.8s ease;
+            "
+            aria-hidden="true"
+          >
+            &nbsp;
+          </div>
         </div>
-        <div class="shap-value-{{ loop.index }}"
-             style="min-width:55px;text-align:right;font-size:0.83rem;font-weight:600;">
+        <div
+          class="shap-value-{{ loop.index }}"
+          style="
+            min-width: 55px;
+            text-align: right;
+            font-size: 0.83rem;
+            font-weight: 600;
+          "
+        >
           {{ feat.impact }}
         </div>
       </div>
@@ -156,12 +203,16 @@ block content %}
   {% endif %}
 
   <!-- ── FINANCIAL RISK BREAKDOWN (FIX Bug 13) ─────────────────────────── -->
-  <div class="form-card" style="margin-top:1.5rem;">
-    <h3 class="section-head"><span class="section-num">💰</span> Financial Risk Breakdown</h3>
-    <div class="detail-grid" style="margin-top:0.8rem;">
+  <div class="form-card" style="margin-top: 1.5rem">
+    <h3 class="section-head">
+      <span class="section-num">💰</span> Financial Risk Breakdown
+    </h3>
+    <div class="detail-grid" style="margin-top: 0.8rem">
       <div class="detail-card">
         <div class="dc-label">Loan Amount</div>
-        <div class="dc-value">${{ "{:,.0f}".format(loan_amnt) if loan_amnt else '—' }}</div>
+        <div class="dc-value">
+          ${{ "{:,.0f}".format(loan_amnt) if loan_amnt else '—' }}
+        </div>
       </div>
       <div class="detail-card">
         <div class="dc-label">PD (Prob. of Default)</div>
@@ -173,11 +224,16 @@ block content %}
       </div>
       <div class="detail-card">
         <div class="dc-label">Expected Loss</div>
-        <div class="dc-value" style="color:#f97316;">${{ "{:,.2f}".format(expected_loss) if expected_loss else '—' }}</div>
+        <div class="dc-value" style="color: #f97316">
+          ${{ "{:,.2f}".format(expected_loss) if expected_loss else '—' }}
+        </div>
       </div>
       <div class="detail-card">
         <div class="dc-label">Expected Profit</div>
-        <div class="dc-value" style="color:{% if expected_profit and expected_profit > 0 %}#22c55e{% else %}#f97316{% endif %};">
+        <div
+          class="dc-value"
+          style="color:{% if expected_profit and expected_profit > 0 %}#22c55e{% else %}#f97316{% endif %};"
+        >
           ${{ "{:,.2f}".format(expected_profit) if expected_profit else '—' }}
         </div>
       </div>
@@ -191,4 +247,3 @@ block content %}
   </div>
 </div>
 {% endblock %}
-

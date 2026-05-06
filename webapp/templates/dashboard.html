@@ -5,8 +5,26 @@ content %}
     <div class="hero-pill">📊 Live Analytics</div>
     <h1 class="hero-h1">Model<br /><em>Dashboard</em></h1>
     <p class="hero-sub">
-      Real-time performance metrics from the trained XGBoost classifier.
+      Real-time performance metrics from the trained serving model.
     </p>
+    <div
+      class="hero-pill"
+      style="
+        margin-top: 14px;
+        display: inline-flex;
+        gap: 10px;
+        align-items: center;
+      "
+    >
+      <span
+        >Active model:
+        <strong>{{ metrics.model_name|default('unknown')|upper }}</strong></span
+      >
+      <span
+        >Threshold:
+        <strong>{{ "%.2f"|format(metrics.decision_threshold) }}</strong></span
+      >
+    </div>
   </div>
 </div>
 
@@ -31,6 +49,31 @@ content %}
       </div>
     </div>
     {% endfor %}
+
+    <div class="metric-tile fade-in" style="--accent: #14b8a6">
+      <div class="mt-icon">🧠</div>
+      <div class="mt-value">
+        {{ metrics.model_name|default('unknown')|upper }}
+      </div>
+      <div class="mt-label">Active Model</div>
+      <div class="mt-bar">
+        <div class="mt-fill" style="width: 100%; background: #14b8a6"></div>
+      </div>
+    </div>
+
+    <div class="metric-tile fade-in" style="--accent: #f59e0b">
+      <div class="mt-icon">🎚️</div>
+      <div class="mt-value">
+        {{ "%.2f"|format(metrics.decision_threshold) }}
+      </div>
+      <div class="mt-label">Decision Threshold</div>
+      <div class="mt-bar">
+        <div
+          class="mt-fill"
+          style="width: {{ metrics.decision_threshold * 100 }}%; background: #f59e0b"
+        ></div>
+      </div>
+    </div>
 
     <!-- ROC-AUC (separate tile) -->
     <div class="metric-tile fade-in" style="--accent: #f97316">

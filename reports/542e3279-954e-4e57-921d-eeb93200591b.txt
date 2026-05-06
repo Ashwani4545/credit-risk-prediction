@@ -1,0 +1,18 @@
+
+    ===== Loan Risk Report =====
+    
+    Borrower: AA
+    Loan Amount: 10000000000.0
+    
+    Probability of Default (PD): 100.0%
+    Risk Level: HIGH RISK
+    
+    Decision: Default
+    
+    Key Factors:
+    
+ - initial_list_status_w: impact 0.0
+ - earliest_cr_line_Sep_99: impact 0.0
+ - earliest_cr_line_Sep_98: impact 0.0
+ - earliest_cr_line_Sep_97: impact 0.0
+ - earliest_cr_line_Sep_96: impact 0.0
