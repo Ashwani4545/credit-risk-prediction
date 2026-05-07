@@ -490,30 +490,32 @@ def predict():
         expected_profit = (loan_amount * (1 - probability) * int_rate_decimal
                           - loan_amount * probability * lgd)
         income = float(form_data.get("annual_inc", 0) or 0)
-        override_triggered = income > 0 and loan_amount > 5 * income
-        print(f"Decision debug -> prob={prob:.4f}, threshold={threshold:.2f}, override={override_triggered}")
-        log.info("Decision debug -> prob=%.4f threshold=%.2f override=%s", prob, threshold, override_triggered)
+        policy_warning = income > 0 and loan_amount > 2 * income
+        print(f"Decision debug -> prob={prob:.4f}, threshold={threshold:.2f}, policy_warning={policy_warning}")
+        log.info("Decision debug -> prob=%.4f threshold=%.2f policy_warning=%s", prob, threshold, policy_warning)
 
         # ── Risk classification (single source of truth: config.RISK_LEVELS) ──
-        # FIX: replaced 4 duplicate inconsistent functions with get_risk_level()
-        if override_triggered:
-            risk       = "High Risk (Override)"
-            verdict    = "High Risk (Override)"
-            show_warning = True
-            log.warning("Override triggered for borrower=%s (loan_amount=%.2f, annual_inc=%.2f)",
-                        form_data.get("borrower_name", "Anonymous"), loan_amount, income)
+        # The model decides the risk label; policy checks can only add a manual-review warning.
+        risk_info    = get_risk_level(prob)   # from utils/config.py — canonical thresholds
+        risk_label_v = risk_info["label"]     # e.g. "LOW RISK", "MEDIUM RISK", etc.
+        if predicted_default:
+            if risk_label_v == "LOW RISK":
+                risk, verdict, show_warning = "Medium Risk", "Review", True
+            elif risk_label_v == "MEDIUM RISK":
+                risk, verdict, show_warning = "Medium Risk", "Review", True
+            else:  # HIGH RISK / VERY HIGH RISK
+                risk, verdict, show_warning = "High Risk", "Default", True
         else:
-            risk_info    = get_risk_level(prob)   # from utils/config.py — canonical thresholds
-            risk_label_v = risk_info["label"]     # e.g. "LOW RISK", "MEDIUM RISK", etc.
-            if predicted_default:
-                if risk_label_v == "LOW RISK":
-                    risk, verdict, show_warning = "Medium Risk", "Review", True
-                elif risk_label_v == "MEDIUM RISK":
-                    risk, verdict, show_warning = "Medium Risk", "Review", True
-                else:  # HIGH RISK / VERY HIGH RISK
-                    risk, verdict, show_warning = "High Risk", "Default", True
-            else:
-                risk, verdict, show_warning = "Low Risk", "Repay", False
+            risk, verdict, show_warning = "Low Risk", "Repay", False
+
+        if policy_warning:
+            show_warning = True
+            log.warning(
+                "Manual-review policy flag for borrower=%s (loan_amount=%.2f, annual_inc=%.2f)",
+                form_data.get("borrower_name", "Anonymous"),
+                loan_amount,
+                income,
+            )
 
         prediction   = verdict
         decision     = verdict
