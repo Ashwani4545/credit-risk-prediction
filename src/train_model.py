@@ -329,14 +329,14 @@ def train_all(X_train, y_train) -> tuple[str, object, float]:
         model.fit(X_fit, y_fit)
         val_prob = model.predict_proba(X_val)[:, 1]
         
-        # Optimize for profit using loan amounts
-        best_threshold, best_profit = _tune_threshold(y_val, val_prob, X_val["loan_amnt"])
+        # Optimize threshold for balanced classification quality on validation data.
+        best_threshold, best_f1 = _tune_threshold(y_val, val_prob)
         val_pred = (val_prob >= best_threshold).astype(int)
-        val_f1 = f1_score(y_val, val_pred, zero_division=0)
+        val_profit = calculate_profit(y_val, val_pred, X_val["loan_amnt"])
         validation_scores[name] = {
             "threshold": best_threshold,
-            "f1": float(val_f1),
-            "profit": round(float(best_profit), 2),
+            "f1": float(best_f1),
+            "profit": round(float(val_profit), 2),
             "roc_auc": round(float(roc_auc_score(y_val, val_prob)), 4),
         }
         fitted_models[name] = model
@@ -344,16 +344,16 @@ def train_all(X_train, y_train) -> tuple[str, object, float]:
             "%s validation → threshold=%.2f  f1=%.4f  profit=%.2f  roc_auc=%.4f",
             name,
             best_threshold,
-            val_f1,
-            best_profit,
+            best_f1,
+            val_profit,
             validation_scores[name]["roc_auc"],
         )
 
-    # Select best model by profit (primary) then F1 (secondary)
-    best_name = max(validation_scores, key=lambda k: (validation_scores[k]["profit"], validation_scores[k]["f1"]))
+    # Select best model by F1 (primary) then profit (secondary)
+    best_name = max(validation_scores, key=lambda k: (validation_scores[k]["f1"], validation_scores[k]["profit"]))
     best_threshold = validation_scores[best_name]["threshold"]
-    log.info("Selected best model by validation profit: %s (threshold=%.2f, profit=%.2f)", 
-             best_name, best_threshold, validation_scores[best_name]["profit"])
+    log.info("Selected best model by validation F1: %s (threshold=%.2f, f1=%.4f)", 
+             best_name, best_threshold, validation_scores[best_name]["f1"])
 
     # Refit the chosen model on the full training split before final evaluation.
     final_models = _build_candidate_models(scale_pos_weight)
@@ -370,13 +370,9 @@ def train_all(X_train, y_train) -> tuple[str, object, float]:
 
 def evaluate_model(model, model_name: str, X_test, y_test, decision_threshold: float) -> dict:
     y_prob = model.predict_proba(X_test)[:, 1]
-    
-    # Re-optimize threshold on test set for maximum profit
-    test_threshold, test_profit = _tune_threshold(y_test, y_prob, X_test["loan_amnt"])
-    log.info("🎯 Final threshold optimization: %.2f → %.2f (profit gain: %.2f)", 
-             decision_threshold, test_threshold, test_profit - calculate_profit(y_test, (y_prob >= decision_threshold).astype(int), X_test["loan_amnt"]))
-    decision_threshold = test_threshold
-    
+    test_profit = calculate_profit(y_test, (y_prob >= decision_threshold).astype(int), X_test["loan_amnt"])
+    log.info("🎯 Using validation threshold %.2f on test set (profit=%.2f)", decision_threshold, test_profit)
+
     preds = (y_prob >= decision_threshold).astype(int)
 
     recall = recall_score(y_test, preds, zero_division=0)

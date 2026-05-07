@@ -145,6 +145,13 @@ REFERENCE_DATA = pd.read_csv(PROCESSED_DATA_PATH).iloc[:10000]
 EXPLAINER = LoanModelExplainer()
 
 
+def _refresh_metrics() -> dict:
+    """Reload metrics from disk so the app uses the latest trained threshold."""
+    global METRICS
+    METRICS = _load_metrics()
+    return METRICS
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PREDICTION HISTORY  (JSON file — swap for SQLite in production)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -476,7 +483,8 @@ def predict():
         prob        = float(MODEL.predict_proba(input_data)[0][1])
         probability = prob
         log.info("Probability of default: %.4f", prob)
-        threshold = float(METRICS.get("decision_threshold", 0.5))
+        metrics = _refresh_metrics()
+        threshold = float(metrics.get("decision_threshold", 0.5))
         predicted_default = prob >= threshold
 
         pd_value = probability
@@ -643,7 +651,7 @@ def predict():
 
 @app.route("/dashboard")
 def dashboard():
-    return render_template("dashboard.html", metrics=METRICS)
+    return render_template("dashboard.html", metrics=_refresh_metrics())
 
 
 @app.route("/history")
@@ -671,7 +679,7 @@ def report_detail(record_id: str):
 
 @app.route("/api/metrics")
 def api_metrics():
-    return jsonify(METRICS)
+    return jsonify(_refresh_metrics())
 
 
 @app.route("/api/history")

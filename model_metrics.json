@@ -1,21 +1,21 @@
 {
-    "accuracy": 0.4279,
-    "precision": 0.2501,
-    "recall": 0.9316,
-    "f1_score": 0.3943,
-    "roc_auc": 0.7409,
+    "accuracy": 0.7298,
+    "precision": 0.3807,
+    "recall": 0.5613,
+    "f1_score": 0.4537,
+    "roc_auc": 0.7418,
     "mse": 0.20286,
-    "rmse": 0.4504,
-    "mae": 0.407377,
-    "mape": 323314297192.444,
-    "r2": -0.268349,
-    "profit": 4908832.5,
-    "decision_threshold": 0.28,
+    "rmse": 0.450399,
+    "mae": 0.407064,
+    "mape": 323247136762.9243,
+    "r2": -0.268348,
+    "profit": -10181937.5,
+    "decision_threshold": 0.56,
     "confusion_matrix": {
-        "tn": 7250,
-        "fp": 16753,
-        "fn": 410,
-        "tp": 5587
+        "tn": 18527,
+        "fp": 5476,
+        "fn": 2631,
+        "tp": 3366
     },
     "model_name": "xgboost"
 }
