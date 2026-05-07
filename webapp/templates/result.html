@@ -19,6 +19,19 @@ block content %} {% set risk_color = '#22c55e' if risk == 'LOW RISK' else
     </div>
 
     <div class="verdict-body">
+      <div class="detail-grid" style="margin-bottom: 1rem">
+        <div class="detail-card">
+          <div class="dc-label">Model Outcome</div>
+          <div class="dc-value">{{ decision_summary }}</div>
+        </div>
+        <div class="detail-card">
+          <div class="dc-label">Decision Basis</div>
+          <div class="dc-value">
+            Threshold {{ (decision_threshold * 100) | round(0) | int }}%
+          </div>
+        </div>
+      </div>
+
       <!-- Probability Gauge -->
       <div class="gauge-wrap">
         <svg
@@ -90,8 +103,7 @@ block content %} {% set risk_color = '#22c55e' if risk == 'LOW RISK' else
       <div
         class="verdict-line {% if show_warning %}verdict-risk{% else %}verdict-safe{% endif %}"
       >
-        {% if show_warning %} Default Risk Detected — Enhanced Review Required
-        {% else %} Safe Borrower — No Immediate Risk {% endif %}
+        {{ decision_reason }}
       </div>
     </div>
   </div>

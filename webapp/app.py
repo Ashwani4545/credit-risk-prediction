@@ -525,6 +525,16 @@ def predict():
                 income,
             )
 
+        if verdict == "Repay" and not show_warning:
+            decision_summary = "Approve"
+            decision_reason = "Model probability is below the decision threshold."
+        elif verdict == "Review":
+            decision_summary = "Review"
+            decision_reason = "Model sees elevated default risk, so a human review is recommended."
+        else:
+            decision_summary = "Reject"
+            decision_reason = "Model probability and risk signals indicate a high default risk."
+
         prediction   = verdict
         decision     = verdict
         # FIX: policy_decision now matches verdict — no contradiction in records
@@ -642,6 +652,9 @@ def predict():
             loan_amnt    = loan_amount,
             pd_value     = round(pd_value, 4),
             lgd          = round(lgd, 2),
+            decision_summary = decision_summary,
+            decision_reason = decision_reason,
+            decision_threshold = threshold,
         )
 
     except Exception as exc:
