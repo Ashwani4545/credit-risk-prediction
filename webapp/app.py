@@ -503,18 +503,26 @@ def predict():
         log.info("Decision debug -> prob=%.4f threshold=%.2f policy_warning=%s", prob, threshold, policy_warning)
 
         # ── Risk classification (single source of truth: config.RISK_LEVELS) ──
-        # The model decides the risk label; policy checks can only add a manual-review warning.
-        risk_info    = get_risk_level(prob)   # from utils/config.py — canonical thresholds
-        risk_label_v = risk_info["label"]     # e.g. "LOW RISK", "MEDIUM RISK", etc.
+        # Use the model probability bands for the risk label, and use the
+        # prediction (prob >= threshold) to decide the action (Repay/Review/Default).
+        risk_info = get_risk_level(prob)   # from utils/config.py — canonical thresholds
+        risk_label_v = risk_info["label"]  # e.g. "LOW RISK", "MEDIUM RISK", etc.
+
+        # Always display the risk band derived from the probability
+        risk = risk_label_v
+
         if predicted_default:
-            if risk_label_v == "LOW RISK":
-                risk, verdict, show_warning = "Medium Risk", "Review", True
-            elif risk_label_v == "MEDIUM RISK":
-                risk, verdict, show_warning = "Medium Risk", "Review", True
-            else:  # HIGH RISK / VERY HIGH RISK
-                risk, verdict, show_warning = "High Risk", "Default", True
+            # If the model predicts default (prob >= threshold) we require
+            # human review for low/medium bands, and auto-default for high bands.
+            if risk_label_v in ("LOW RISK", "MEDIUM RISK"):
+                verdict = "Review"
+            else:
+                verdict = "Default"
+            show_warning = True
         else:
-            risk, verdict, show_warning = "Low Risk", "Repay", False
+            # Model does not predict default — recommend repayment/approve
+            verdict = "Repay"
+            show_warning = False
 
         if policy_warning:
             show_warning = True
