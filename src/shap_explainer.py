@@ -338,6 +338,48 @@ class LoanModelExplainer:
         log.info("All reports generated ✅")
 
 
+def get_local_shap(input_df: pd.DataFrame, model_path: str = MODEL_PATH) -> list[dict]:
+    """Return the top local feature contributions for a single prediction row."""
+
+    if not isinstance(input_df, pd.DataFrame):
+        input_df = pd.DataFrame([input_df])
+
+    explainer = LoanModelExplainer(model_path)
+
+    try:
+        shap_values = explainer.generate_shap_values(input_df)
+        if shap_values is not None:
+            values = np.asarray(shap_values.values[0], dtype=float)
+            top_idx = np.argsort(np.abs(values))[-5:][::-1]
+            explanation: list[dict] = []
+            for idx in top_idx:
+                feature_name = input_df.columns[idx]
+                impact = float(values[idx])
+                explanation.append({
+                    "feature": feature_name,
+                    "impact": round(impact, 4),
+                    "direction": "risk" if impact >= 0 else "safe",
+                    "value": input_df.iloc[0][feature_name],
+                })
+            return explanation
+    except Exception:
+        log.exception("SHAP explanation failed; using fallback explanation path")
+
+    fallback = explainer.explain_single(input_df)
+    results: list[dict] = []
+    for row in fallback:
+        feature_name = row["feature"]
+        impact = float(row["impact"])
+        value = input_df.iloc[0][feature_name] if feature_name in input_df.columns else None
+        results.append({
+            "feature": feature_name,
+            "impact": round(impact, 4),
+            "direction": "risk" if impact >= 0 else "safe",
+            "value": value,
+        })
+    return results
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────

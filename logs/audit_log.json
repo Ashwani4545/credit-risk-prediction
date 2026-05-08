@@ -1,5 +1,181 @@
 [
   {
+    "timestamp": "2026-05-08T06:06:16.883283+00:00",
+    "raw_input": {
+      "loan_amnt": 12300.0,
+      "term": "36 months",
+      "int_rate": 11.53,
+      "installment": 375.43,
+      "grade": "B",
+      "sub_grade": "B3",
+      "emp_length": "2 years",
+      "home_ownership": "MORTGAGE",
+      "annual_inc": 65000.0,
+      "verification_status": "Source Verified",
+      "purpose": "debt_consolidation",
+      "addr_state": "CA",
+      "dti": 18.37,
+      "delinq_2yrs": 0.0,
+      "earliest_cr_line": "Aug-02",
+      "fico_range_low": 685.0,
+      "fico_range_high": 689.0,
+      "inq_last_6mths": 0.0,
+      "open_acc": 11.0,
+      "pub_rec": 0.0,
+      "revol_bal": 11472.0,
+      "revol_util": 52.0,
+      "total_acc": 24.0,
+      "initial_list_status": "w",
+      "collections_12_mths_ex_med": 0.0,
+      "acc_now_delinq": 0.0,
+      "tot_coll_amt": 0.0,
+      "tot_cur_bal": 78346.0,
+      "avg_cur_bal": 7207.0,
+      "bc_open_to_buy": 4654.0,
+      "bc_util": 63.6,
+      "num_actv_bc_tl": 3.0,
+      "num_rev_accts": 13.0,
+      "percent_bc_gt_75": 42.9,
+      "pub_rec_bankruptcies": 0.0,
+      "tax_liens": 0.0,
+      "loan_income_ratio": 0.1999966667222213,
+      "revol_income_ratio": 0.1845163344033639,
+      "open_acc_ratio": 0.4666666666666667,
+      "installment_income_ratio": 0.0059608003015361,
+      "fico_avg": 687.0,
+      "risk_score": 201.3916
+    },
+    "prediction": "Repay",
+    "prediction_numeric": 0,
+    "default_probability": 0.41065,
+    "threshold_used": 0.5,
+    "risk_level": "MEDIUM RISK",
+    "override_applied": false,
+    "advice": [
+      "No additional adverse risk signals were detected beyond the model output."
+    ],
+    "shap_values": [
+      {
+        "feature": "term__60_months",
+        "impact": -0.1972,
+        "direction": "safe",
+        "value": 0.0
+      },
+      {
+        "feature": "int_rate",
+        "impact": -0.1171,
+        "direction": "safe",
+        "value": 11.529999732971191
+      },
+      {
+        "feature": "inq_last_6mths",
+        "impact": -0.0851,
+        "direction": "safe",
+        "value": 0.0
+      },
+      {
+        "feature": "home_ownership_MORTGAGE",
+        "impact": 0.0408,
+        "direction": "risk",
+        "value": 0.0
+      },
+      {
+        "feature": "verification_status_Verified",
+        "impact": -0.0297,
+        "direction": "safe",
+        "value": 0.0
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-05-08T06:05:24.562830+00:00",
+    "raw_input": {
+      "loan_amnt": 12300.0,
+      "term": "36 months",
+      "int_rate": 11.53,
+      "installment": 375.43,
+      "grade": "B",
+      "sub_grade": "B3",
+      "emp_length": "2 years",
+      "home_ownership": "MORTGAGE",
+      "annual_inc": 65000.0,
+      "verification_status": "Source Verified",
+      "purpose": "debt_consolidation",
+      "addr_state": "CA",
+      "dti": 18.37,
+      "delinq_2yrs": 0.0,
+      "earliest_cr_line": "Aug-02",
+      "fico_range_low": 685.0,
+      "fico_range_high": 689.0,
+      "inq_last_6mths": 0.0,
+      "open_acc": 11.0,
+      "pub_rec": 0.0,
+      "revol_bal": 11472.0,
+      "revol_util": 52.0,
+      "total_acc": 24.0,
+      "initial_list_status": "w",
+      "collections_12_mths_ex_med": 0.0,
+      "acc_now_delinq": 0.0,
+      "tot_coll_amt": 0.0,
+      "tot_cur_bal": 78346.0,
+      "avg_cur_bal": 7207.0,
+      "bc_open_to_buy": 4654.0,
+      "bc_util": 63.6,
+      "num_actv_bc_tl": 3.0,
+      "num_rev_accts": 13.0,
+      "percent_bc_gt_75": 42.9,
+      "pub_rec_bankruptcies": 0.0,
+      "tax_liens": 0.0,
+      "loan_income_ratio": 0.1999966667222213,
+      "revol_income_ratio": 0.1845163344033639,
+      "open_acc_ratio": 0.4666666666666667,
+      "installment_income_ratio": 0.0059608003015361,
+      "fico_avg": 687.0,
+      "risk_score": 201.3916
+    },
+    "prediction": "Repay",
+    "prediction_numeric": 0,
+    "default_probability": 0.41065,
+    "threshold_used": 0.5,
+    "risk_level": "MEDIUM RISK",
+    "override_applied": false,
+    "advice": [
+      "No additional adverse risk signals were detected beyond the model output."
+    ],
+    "shap_values": [
+      {
+        "feature": "term__60_months",
+        "impact": -0.1972,
+        "direction": "safe",
+        "value": 0.0
+      },
+      {
+        "feature": "int_rate",
+        "impact": -0.1171,
+        "direction": "safe",
+        "value": 11.529999732971191
+      },
+      {
+        "feature": "inq_last_6mths",
+        "impact": -0.0851,
+        "direction": "safe",
+        "value": 0.0
+      },
+      {
+        "feature": "home_ownership_MORTGAGE",
+        "impact": 0.0408,
+        "direction": "risk",
+        "value": 0.0
+      },
+      {
+        "feature": "verification_status_Verified",
+        "impact": -0.0297,
+        "direction": "safe",
+        "value": 0.0
+      }
+    ]
+  },
+  {
     "id": "1e82fab7-692f-4678-b44e-5cdba8ab3ca5",
     "trace_id": "300a2e5e-5f06-409f-a8e0-4e7db301aa2d",
     "timestamp": "2026-05-07T18:01:16.375952Z",
