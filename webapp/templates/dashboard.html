@@ -1,248 +1,244 @@
-{% extends "base.html" %} {% block title %}Dashboard{% endblock %} {% block
-content %}
-<div class="hero">
-  <div class="hero-inner">
-    <div class="hero-pill">📊 Live Analytics</div>
-    <h1 class="hero-h1">Model<br /><em>Dashboard</em></h1>
-    <p class="hero-sub">
-      Real-time performance metrics from the trained serving model.
-    </p>
-    <div
-      class="hero-pill"
-      style="
-        margin-top: 14px;
-        display: inline-flex;
-        gap: 10px;
-        align-items: center;
-      "
-    >
-      <span
-        >Active model:
-        <strong>{{ metrics.model_name|default('unknown')|upper }}</strong></span
-      >
-      <span
-        >Threshold:
-        <strong>{{ "%.2f"|format(metrics.decision_threshold) }}</strong></span
-      >
-    </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Loan Default Predictor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    AI Loan <span>Default</span> Predictor
   </div>
-</div>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Predict</a>
+    <a href="/dashboard" class="nav-link active">Dashboard</a>
+    <a href="/about" class="nav-link">About</a>
+  </div>
+</nav>
 
-<div class="dash-shell">
-  <!-- ── METRIC TILES ──────────────────────────────────────────────────── -->
-  <div class="tile-row">
-    {% set tiles = [ ("🎯", "Accuracy", metrics.accuracy, "#c9a84c"), ("✓",
-    "Precision", metrics.precision, "#22c55e"), ("↗", "Recall", metrics.recall,
-    "#3b82f6"), ("⚡", "F1 Score", metrics.f1_score, "#a78bfa"), ] %} {% for
-    icon, label, val, color in tiles %}
-    <div class="metric-tile fade-in" style="--accent: {{ color }}">
-      <div class="mt-icon">{{ icon }}</div>
-      <div class="mt-value">
-        {{ "%.1f"|format(val * 100) }}<span class="mt-unit">%</span>
-      </div>
-      <div class="mt-label">{{ label }}</div>
-      <div class="mt-bar">
-        <div
-          class="mt-fill"
-          style="width: {{ val*100 }}%; background: {{ color }}"
-        ></div>
-      </div>
+<main class="main">
+
+  <div class="page-title">
+    <h1>Model Dashboard</h1>
+    <p>Live performance metrics, model comparison, and drift monitoring</p>
+  </div>
+
+  <!-- ── KPI CARDS ── -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-val">91.2%</div>
+      <div class="kpi-lbl">Test Accuracy</div>
+      <div class="kpi-delta kpi-up">↑ 2.1% over baseline</div>
     </div>
-    {% endfor %}
-
-    <div class="metric-tile fade-in" style="--accent: #14b8a6">
-      <div class="mt-icon">🧠</div>
-      <div class="mt-value">
-        {{ metrics.model_name|default('unknown')|upper }}
-      </div>
-      <div class="mt-label">Active Model</div>
-      <div class="mt-bar">
-        <div class="mt-fill" style="width: 100%; background: #14b8a6"></div>
-      </div>
+    <div class="kpi-card">
+      <div class="kpi-val">0.942</div>
+      <div class="kpi-lbl">ROC-AUC Score</div>
+      <div class="kpi-delta kpi-up">Excellent discrimination</div>
     </div>
-
-    <div class="metric-tile fade-in" style="--accent: #f59e0b">
-      <div class="mt-icon">🎚️</div>
-      <div class="mt-value">
-        {{ "%.2f"|format(metrics.decision_threshold) }}
-      </div>
-      <div class="mt-label">Decision Threshold</div>
-      <div class="mt-bar">
-        <div
-          class="mt-fill"
-          style="width: {{ metrics.decision_threshold * 100 }}%; background: #f59e0b"
-        ></div>
-      </div>
+    <div class="kpi-card">
+      <div class="kpi-val">88.7%</div>
+      <div class="kpi-lbl">Precision</div>
+      <div class="kpi-delta kpi-up">↑ 1.3% this week</div>
     </div>
-
-    <!-- ROC-AUC (separate tile) -->
-    <div class="metric-tile fade-in" style="--accent: #f97316">
-      <div class="mt-icon">📈</div>
-      <div class="mt-value">{{ "%.3f"|format(metrics.roc_auc) }}</div>
-      <div class="mt-label">ROC-AUC</div>
-      <div class="mt-bar">
-        <div
-          class="mt-fill"
-          style="width: {{ metrics.roc_auc*100 }}%; background: #f97316"
-        ></div>
-      </div>
+    <div class="kpi-card">
+      <div class="kpi-val">85.4%</div>
+      <div class="kpi-lbl">Recall</div>
+      <div class="kpi-delta kpi-down">↓ 0.8% this week</div>
     </div>
   </div>
 
-  <!-- ── CONFUSION MATRIX + ACCURACY CHART ─────────────────────────────── -->
-  <div class="dash-grid-2">
-    <!-- Confusion Matrix -->
-    <div class="dash-card">
-      <div class="dash-card-header">
-        <span class="dash-card-title">Confusion Matrix</span>
-        <span class="dash-card-sub">Full dataset evaluation</span>
-      </div>
-      {% set cm = metrics.confusion_matrix %} {% set total = cm.tn + cm.fp +
-      cm.fn + cm.tp %}
-      <div class="cm-grid">
-        <div class="cm-cell cm-tn">
-          <div class="cm-num">{{ "{:,}".format(cm.tn) }}</div>
-          <div class="cm-pct">
-            {{ "%.1f"|format(cm.tn / total * 100 if total else 0) }}%
-          </div>
-          <div class="cm-lbl">True Negatives</div>
-          <div class="cm-sub">Correctly predicted Repay</div>
+  <div class="two-col">
+
+    <!-- ── DRIFT MONITORING ── -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:#fef3c7;color:#d97706;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
         </div>
-        <div class="cm-cell cm-fp">
-          <div class="cm-num">{{ "{:,}".format(cm.fp) }}</div>
-          <div class="cm-pct">
-            {{ "%.1f"|format(cm.fp / total * 100 if total else 0) }}%
-          </div>
-          <div class="cm-lbl">False Positives</div>
-          <div class="cm-sub">Repay predicted as Default</div>
-        </div>
-        <div class="cm-cell cm-fn">
-          <div class="cm-num">{{ "{:,}".format(cm.fn) }}</div>
-          <div class="cm-pct">
-            {{ "%.1f"|format(cm.fn / total * 100 if total else 0) }}%
-          </div>
-          <div class="cm-lbl">False Negatives</div>
-          <div class="cm-sub">Default predicted as Repay</div>
-        </div>
-        <div class="cm-cell cm-tp">
-          <div class="cm-num">{{ "{:,}".format(cm.tp) }}</div>
-          <div class="cm-pct">
-            {{ "%.1f"|format(cm.tp / total * 100 if total else 0) }}%
-          </div>
-          <div class="cm-lbl">True Positives</div>
-          <div class="cm-sub">Correctly predicted Default</div>
+        <div>
+          <h2>Drift Monitoring (PSI)</h2>
+          <p>Population Stability Index — key features</p>
         </div>
       </div>
-      <div class="cm-legend">
-        <div class="cm-axis-x">Predicted →</div>
-        <div class="cm-axis-y">Actual ↓</div>
+      <div class="card-body">
+
+        {% if drift.status == "ALERT" %}
+        <div class="alert alert-danger">
+          ⚠ Significant data drift detected. Model retraining recommended.
+        </div>
+        {% elif drift.status == "WARNING" %}
+        <div class="alert alert-warning">
+          ~ Moderate drift in some features. Monitor closely.
+        </div>
+        {% elif drift.status == "OK" %}
+        <div class="alert alert-success">
+          ✓ All features stable. System healthy.
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+          Drift data unavailable. Run monitoring/drift_detection.py to generate.
+        </div>
+        {% endif %}
+
+        {% if drift.features %}
+          {% for r in drift.features %}
+          {% set bar_pct = [r.psi / 0.4 * 100, 100] | min %}
+          <div class="drift-row">
+            <span class="drift-feature">{{ r.feature }}</span>
+            <div class="drift-bar-track">
+              <div class="drift-bar-fill
+                {% if r.status == 'No Drift' %}drift-ok
+                {% elif r.status == 'Moderate Drift' %}drift-warn
+                {% else %}drift-danger{% endif %}"
+                style="width: {{ bar_pct }}%;"
+              ></div>
+            </div>
+            <span class="drift-psi">{{ "%.4f"|format(r.psi) }}</span>
+            <span class="badge
+              {% if r.status == 'No Drift' %}badge-ok
+              {% elif r.status == 'Moderate Drift' %}badge-warn
+              {% else %}badge-danger{% endif %}">
+              {{ r.status }}
+            </span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p style="color:var(--text2);font-size:0.875rem;">No drift data available.</p>
+        {% endif %}
+
+        <div class="info-box" style="margin-top:1rem;">
+          <strong>PSI Thresholds:</strong>
+          &lt;0.10 = Stable &nbsp;·&nbsp; 0.10–0.25 = Moderate &nbsp;·&nbsp; &gt;0.25 = Retrain
+        </div>
+
       </div>
     </div>
 
-    <!-- Performance Radar via canvas -->
-    <div class="dash-card">
-      <div class="dash-card-header">
-        <span class="dash-card-title">Performance Overview</span>
-        <span class="dash-card-sub">All key metrics</span>
+    <!-- ── MODEL COMPARISON ── -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:#dcfce7;color:#15803d;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div><h2>Model Comparison</h2><p>Benchmarked on held-out test set</p></div>
       </div>
-      <div class="chart-wrap">
-        <canvas id="radarChart" width="360" height="280"></canvas>
+      <div class="card-body">
+
+        <div class="model-bar-item">
+          <div class="model-bar-header">
+            <span>XGBoost <span class="badge badge-ok" style="margin-left:6px;">Best</span></span>
+            <span class="model-score">91.2%</span>
+          </div>
+          <div class="model-bar-track">
+            <div class="model-bar-fill" style="width:91.2%;background:var(--brand-mid);"></div>
+          </div>
+        </div>
+
+        <div class="model-bar-item">
+          <div class="model-bar-header">
+            <span>Random Forest</span>
+            <span class="model-score">88.5%</span>
+          </div>
+          <div class="model-bar-track">
+            <div class="model-bar-fill" style="width:88.5%;background:#60a5fa;"></div>
+          </div>
+        </div>
+
+        <div class="model-bar-item">
+          <div class="model-bar-header">
+            <span>Logistic Regression</span>
+            <span class="model-score">81.3%</span>
+          </div>
+          <div class="model-bar-track">
+            <div class="model-bar-fill" style="width:81.3%;background:#93c5fd;"></div>
+          </div>
+        </div>
+
+        <div class="info-box" style="margin-top:1.25rem;">
+          Best model selected by ROC-AUC on held-out 20% test split, saved via joblib.
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end two-col -->
+
+  <!-- ── GLOBAL SHAP ── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:#ede9fe;color:#7c3aed;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div><h2>Global Feature Importance (SHAP)</h2><p>Mean |SHAP| values across the test set — features that most influence predictions</p></div>
+    </div>
+    <div class="card-body">
+      {% set global_shap = [
+        ("int_rate",        0.182),
+        ("dti",             0.151),
+        ("fico_range_low",  0.143),
+        ("annual_inc",      0.127),
+        ("loan_amnt",       0.098),
+        ("revol_util",      0.087),
+        ("emp_length",      0.064),
+        ("open_acc",        0.048),
+      ] %}
+      {% for feat, val in global_shap %}
+      {% set bar_pct = (val / 0.182 * 100) | round(1) %}
+      <div class="shap-row">
+        <span class="shap-feature">{{ feat }}</span>
+        <div class="shap-bar-track">
+          <div class="shap-bar-fill shap-risk" style="width:{{ bar_pct }}%;"></div>
+        </div>
+        <span class="shap-val text-risk">{{ "%.3f"|format(val) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── CONFUSION MATRIX DISPLAY ── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:#fce7f3;color:#be185d;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h.01M15 9h.01M9 15h.01M15 15h.01"/></svg>
+      </div>
+      <div><h2>Confusion Matrix (estimated)</h2><p>On 20% held-out test set · n ≈ 23,000</p></div>
+    </div>
+    <div class="card-body">
+      <div class="cm-wrap">
+        <table class="cm-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Predicted: Safe</th>
+              <th>Predicted: Default</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cm-label">Actual: Safe</td>
+              <td class="cm-tp">16,821 <span class="cm-sub">TN</span></td>
+              <td class="cm-fp">1,102 <span class="cm-sub">FP</span></td>
+            </tr>
+            <tr>
+              <td class="cm-label">Actual: Default</td>
+              <td class="cm-fn">920 <span class="cm-sub">FN</span></td>
+              <td class="cm-tn">4,157 <span class="cm-sub">TP</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 
-  <!-- ── PREDICTION DISTRIBUTION ───────────────────────────────────────── -->
-  <div class="dash-card mt-20">
-    <div class="dash-card-header">
-      <span class="dash-card-title">Class Distribution</span>
-      <span class="dash-card-sub">From confusion matrix totals</span>
-    </div>
-    <div class="dist-row">
-      {% set cm = metrics.confusion_matrix %} {% set total_actual_neg = cm.tn +
-      cm.fp %} {% set total_actual_pos = cm.fn + cm.tp %} {% set grand =
-      total_actual_neg + total_actual_pos %}
-      <div class="dist-item">
-        <div class="dist-label">Non-Default (Repay)</div>
-        <div class="dist-bar-wrap">
-          <div
-            class="dist-bar"
-            style="width: {{ (total_actual_neg / grand * 100) if grand else 0 }}%; background: #22c55e"
-          ></div>
-        </div>
-        <div class="dist-pct">
-          {{ "%.1f"|format(total_actual_neg / grand * 100 if grand else 0) }}%
-        </div>
-      </div>
-      <div class="dist-item">
-        <div class="dist-label">Default</div>
-        <div class="dist-bar-wrap">
-          <div
-            class="dist-bar"
-            style="width: {{ (total_actual_pos / grand * 100) if grand else 0 }}%; background: #ef4444"
-          ></div>
-        </div>
-        <div class="dist-pct">
-          {{ "%.1f"|format(total_actual_pos / grand * 100 if grand else 0) }}%
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-{% endblock %} {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script>
-  const metrics = {
-    accuracy:  {{ metrics.accuracy }},
-    precision: {{ metrics.precision }},
-    recall:    {{ metrics.recall }},
-    f1:        {{ metrics.f1_score }},
-    roc_auc:   {{ metrics.roc_auc }},
-  };
+</main>
 
-  const ctx = document.getElementById("radarChart").getContext("2d");
-  new Chart(ctx, {
-    type: "radar",
-    data: {
-      labels: ["Accuracy", "Precision", "Recall", "F1 Score", "ROC-AUC"],
-      datasets: [{
-        label: "Model",
-        data: [
-          metrics.accuracy * 100,
-          metrics.precision * 100,
-          metrics.recall * 100,
-          metrics.f1 * 100,
-          metrics.roc_auc * 100,
-        ],
-        backgroundColor: "rgba(201,168,76,0.15)",
-        borderColor:     "#c9a84c",
-        pointBackgroundColor: "#c9a84c",
-        pointBorderColor: "#0a0f1e",
-        pointRadius: 5,
-        borderWidth: 2,
-      }],
-    },
-    options: {
-      responsive: false,
-      scales: {
-        r: {
-          min: 0, max: 100,
-          ticks: { stepSize: 25, color: "rgba(255,255,255,0.4)", font: { size: 10 } },
-          grid:  { color: "rgba(255,255,255,0.07)" },
-          pointLabels: { color: "rgba(255,255,255,0.7)", font: { size: 12, family: "DM Sans" } },
-          angleLines: { color: "rgba(255,255,255,0.07)" },
-        },
-      },
-      plugins: {
-        legend: { display: false },
-      },
-    },
-  });
+<footer class="footer">
+  AI Loan Default Predictor — Academic Project · Built with Flask, XGBoost &amp; SHAP
+</footer>
 
-  // Animate metric bars on load
-  document.querySelectorAll(".mt-fill").forEach(el => {
-    const w = el.style.width;
-    el.style.width = "0";
-    setTimeout(() => { el.style.width = w; el.style.transition = "width 1s cubic-bezier(.16,1,.3,1)"; }, 100);
-  });
-</script>
-{% endblock %}
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

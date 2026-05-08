@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Error — Loan Default Predictor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    AI Loan <span>Default</span> Predictor
+  </div>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Predict</a>
+    <a href="/dashboard" class="nav-link">Dashboard</a>
+    <a href="/about" class="nav-link">About</a>
+  </div>
+</nav>
+
+<main class="main" style="text-align:center; padding-top: 4rem;">
+  <div class="card" style="max-width:540px; margin:0 auto;">
+    <div class="card-body" style="padding: 2.5rem 2rem;">
+      <div style="font-size:3rem; margin-bottom:1rem;">⚠️</div>
+      <h2 style="font-size:1.25rem; margin-bottom:0.5rem;">Something went wrong</h2>
+      <p style="color:var(--text2); font-size:0.875rem; margin-bottom:1.5rem;">
+        The prediction could not be completed. This usually means the model file is missing.
+        Run <code>python src/train_model.py</code> to generate it.
+      </p>
+      {% if error %}
+      <pre class="code-block" style="text-align:left; font-size:0.78rem; margin-bottom:1.5rem;">{{ error }}</pre>
+      {% endif %}
+      <a href="/" class="btn-back">← Try Again</a>
+    </div>
+  </div>
+</main>
+
+<footer class="footer">
+  AI Loan Default Predictor — Academic Project
+</footer>
+</body>
+</html>

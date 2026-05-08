@@ -4,11 +4,6 @@
     "recall": 0.5613,
     "f1_score": 0.4537,
     "roc_auc": 0.7418,
-    "mse": 0.20286,
-    "rmse": 0.450399,
-    "mae": 0.407064,
-    "mape": 323247136762.9243,
-    "r2": -0.268348,
     "profit": -10181937.5,
     "decision_threshold": 0.56,
     "confusion_matrix": {

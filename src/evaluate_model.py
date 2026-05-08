@@ -1,8 +1,8 @@
 # src/evaluate_model.py
 """
-Loan Default Prediction — Standalone Model Evaluation
+Loan Default Prediction — Standalone Model Evaluation (XGBoost)
 
-Loads the saved model and processed data, runs evaluation,
+Loads the saved XGBoost model and processed data, runs evaluation,
 prints a report, and overwrites model_metrics.json.
 
 Usage:
@@ -35,15 +35,11 @@ log = logging.getLogger(__name__)
 
 def _align_to_model(X: pd.DataFrame, model) -> pd.DataFrame:
     """
-    Align dataframe columns to the feature names the model was trained on.
+    Align dataframe columns to the feature names the XGBoost model was trained on.
     Missing columns are filled with 0; extra columns are dropped.
     """
-    try:
-        booster = model.get_booster()
-        expected = booster.feature_names
-    except AttributeError:
-        # Sklearn models expose feature_names_in_
-        expected = list(getattr(model, "feature_names_in_", X.columns))
+    booster = model.get_booster()
+    expected = booster.feature_names
 
     for col in expected:
         if col not in X.columns:

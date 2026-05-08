@@ -6,8 +6,8 @@ Steps:
   1. Load processed CSV
   2. One-hot encode & sanitize column names (XGBoost-safe)
   3. Train-test split
-  4. Train Logistic Regression, Random Forest, XGBoost
-  5. Evaluate & pick best model by ROC-AUC
+  4. Train XGBoost only
+  5. Evaluate XGBoost model
   6. Save model + feature list + metrics JSON
 """
 
@@ -29,8 +29,6 @@ from sklearn.metrics import (
     f1_score, roc_auc_score, confusion_matrix, classification_report,
     mean_squared_error, mean_absolute_error, r2_score, roc_curve,
 )
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -92,16 +90,12 @@ def calculate_profit(y_true, y_pred, loan_amounts):
 
 
 def get_feature_importances(model, model_name: str, feature_names: list) -> pd.DataFrame:
-    """Extract feature importances and return top N features."""
+    """Extract feature importances from XGBoost model."""
     importances = None
-    
+
     if hasattr(model, "feature_importances_"):
-        # XGBoost, RandomForest
         importances = model.feature_importances_
-    elif hasattr(model, "coef_"):
-        # LogisticRegression
-        importances = np.abs(model.coef_[0])
-    
+
     if importances is None or len(importances) == 0:
         log.warning("Could not extract feature importances from %s", model_name)
         return pd.DataFrame()
@@ -266,18 +260,6 @@ def _tune_threshold(y_true, y_prob, loan_amounts=None) -> tuple[float, float]:
 
 def _build_candidate_models(scale_pos_weight: float) -> dict:
     return {
-        "logistic_regression": LogisticRegression(
-            max_iter=5000,
-            solver="liblinear",
-            class_weight="balanced",
-            random_state=RANDOM_STATE,
-        ),
-        "random_forest": RandomForestClassifier(
-            n_estimators=100,
-            random_state=RANDOM_STATE,
-            n_jobs=-1,
-            class_weight="balanced_subsample",
-        ),
         "xgboost": XGBClassifier(
             scale_pos_weight=scale_pos_weight,
             eval_metric="aucpr",
@@ -320,48 +302,37 @@ def train_all(X_train, y_train) -> tuple[str, object, float]:
     else:
         scale_pos_weight = negative_count / positive_count
 
-    candidates = _build_candidate_models(scale_pos_weight)
-    validation_scores = {}
-    fitted_models = {}
+    # ── Train XGBoost only ───────────────────────────────────────────────────
+    model = XGBClassifier(
+        scale_pos_weight=scale_pos_weight,
+        eval_metric="aucpr",
+        n_estimators=XGB_PARAMS["n_estimators"],
+        max_depth=XGB_PARAMS["max_depth"],
+        learning_rate=XGB_PARAMS["learning_rate"],
+        subsample=XGB_PARAMS["subsample"],
+        colsample_bytree=XGB_PARAMS["colsample_bytree"],
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+    )
 
-    for name, model in candidates.items():
-        log.info("Training %s on fit split …", name)
-        model.fit(X_fit, y_fit)
-        val_prob = model.predict_proba(X_val)[:, 1]
-        
-        # Optimize threshold for balanced classification quality on validation data.
-        best_threshold, best_f1 = _tune_threshold(y_val, val_prob)
-        val_pred = (val_prob >= best_threshold).astype(int)
-        val_profit = calculate_profit(y_val, val_pred, X_val["loan_amnt"])
-        validation_scores[name] = {
-            "threshold": best_threshold,
-            "f1": float(best_f1),
-            "profit": round(float(val_profit), 2),
-            "roc_auc": round(float(roc_auc_score(y_val, val_prob)), 4),
-        }
-        fitted_models[name] = model
-        log.info(
-            "%s validation → threshold=%.2f  f1=%.4f  profit=%.2f  roc_auc=%.4f",
-            name,
-            best_threshold,
-            best_f1,
-            val_profit,
-            validation_scores[name]["roc_auc"],
-        )
+    log.info("Training XGBoost on fit split …")
+    model.fit(X_fit, y_fit)
+    val_prob = model.predict_proba(X_val)[:, 1]
 
-    # Select best model by F1 (primary) then profit (secondary)
-    best_name = max(validation_scores, key=lambda k: (validation_scores[k]["f1"], validation_scores[k]["profit"]))
-    best_threshold = validation_scores[best_name]["threshold"]
-    log.info("Selected best model by validation F1: %s (threshold=%.2f, f1=%.4f)", 
-             best_name, best_threshold, validation_scores[best_name]["f1"])
+    # Tune decision threshold on validation set
+    best_threshold, best_f1 = _tune_threshold(y_val, val_prob)
+    log.info(
+        "XGBoost validation → threshold=%.2f  f1=%.4f  roc_auc=%.4f",
+        best_threshold,
+        best_f1,
+        roc_auc_score(y_val, val_prob),
+    )
 
-    # Refit the chosen model on the full training split before final evaluation.
-    final_models = _build_candidate_models(scale_pos_weight)
-    best_model = final_models[best_name]
-    best_model.fit(X_train, y_train)
-    log.info("Refit %s on full training split", best_name)
+    # Refit on full training data
+    log.info("Refitting XGBoost on full training split …")
+    model.fit(X_train, y_train)
 
-    return best_name, best_model, best_threshold
+    return "xgboost", model, best_threshold
 
 
 # ─────────────────────────────────────────────────────────────────────────────
