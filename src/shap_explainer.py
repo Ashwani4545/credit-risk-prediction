@@ -141,7 +141,7 @@ class LoanModelExplainer:
             pairs = list(zip(X_df.columns, row))
             pairs.sort(key=lambda x: abs(x[1]), reverse=True)
             return [
-                {"feature": f, "shap_value": round(float(v), 6)}
+                {"feature": f, "impact": round(float(v), 6)}
                 for f, v in pairs[:5]
             ]
         except Exception:
@@ -156,11 +156,51 @@ class LoanModelExplainer:
                 key=lambda x: x[1], reverse=True,
             )
             return [
-                {"feature": f, "shap_value": round(float(v), 6)}
+                {"feature": f, "impact": round(float(v), 6)}
                 for f, v in pairs[:5]
             ]
         except Exception:
             return []
+
+    def check_individual_fairness(self, form_data: dict) -> dict:
+        """
+        Check whether any protected / sensitive fields are present in the
+        submitted form data.  Returns a dict summary (never raises).
+        """
+        sensitive_fields = {"addr_state", "race", "gender", "religion", "national_origin"}
+        found = [f for f in sensitive_fields if f in form_data and form_data[f]]
+        return {
+            "flagged": bool(found),
+            "sensitive_fields_detected": found,
+            "note": (
+                f"Sensitive field(s) detected: {found}. Review for bias."
+                if found
+                else "No protected attributes detected in input."
+            ),
+        }
+
+    def check_group_bias(self, form_data: dict) -> dict:
+        """
+        Lightweight group-bias check based on addr_state.
+        Returns a dict summary (never raises).
+        """
+        state = form_data.get("addr_state", "")
+        return {
+            "flagged": False,
+            "group": state or "unknown",
+            "note": "Group-level bias analysis requires aggregated data — see fairness_report.txt.",
+        }
+
+    def validate_sensitive_features(self, form_data: dict) -> str:
+        """
+        Return a human-readable warning string if any sensitive feature is present,
+        otherwise an empty string.
+        """
+        sensitive_fields = {"race", "gender", "religion", "national_origin"}
+        found = [f for f in sensitive_fields if f in form_data and form_data[f]]
+        if found:
+            return f"⚠️ Sensitive feature(s) present in input: {', '.join(found)}. Ensure compliance with fair-lending regulations."
+        return ""
 
     def generate_fairness_report(self) -> None:
         X_sample, y_sample = self._load_data(sample=5000)
