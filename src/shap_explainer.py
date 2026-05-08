@@ -3,9 +3,9 @@
 Loan Default Prediction — SHAP Explainability & Fairness
 
 Generates:
-  - SHAP summary plot  (shap_summary.png)
-  - SHAP force plot    (shap_force_plot.html)
-  - Fairness report    (fairness_report.txt)
+  - SHAP summary plot  (outputs/shap_summary.png)
+  - SHAP force plot    (outputs/shap_force_plot.html)
+  - Fairness report    (outputs/fairness_report.txt)
 
 Usage:
     python -m src.shap_explainer
@@ -15,7 +15,6 @@ import os
 import re
 import sys
 import logging
-import importlib
 import importlib.util
 from pathlib import Path
 
@@ -23,9 +22,8 @@ import joblib
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use("Agg")          # non-interactive backend — safe for servers
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils.config import MODEL_PATH, PROCESSED_DATA_PATH, TARGET_COLUMN, SENSITIVE_COLUMN
@@ -33,10 +31,10 @@ from utils.config import MODEL_PATH, PROCESSED_DATA_PATH, TARGET_COLUMN, SENSITI
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 log = logging.getLogger(__name__)
 
+OUTPUTS_DIR = os.path.join(Path(__file__).resolve().parent.parent, "outputs")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# COLUMN SANITIZER  (must match train_model.py exactly)
-# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Column sanitizer (must match train_model.py exactly) ─────────────────────
 
 def _sanitize_columns(columns) -> list:
     seen: dict = {}
@@ -46,29 +44,24 @@ def _sanitize_columns(columns) -> list:
         c = re.sub(r"\s+",      "_", c.strip())
         c = re.sub(r"[^0-9a-zA-Z_]", "_", c)
         if c in seen:
-            seen[c] += 1; c = f"{c}_{seen[c]}"
+            seen[c] += 1
+            c = f"{c}_{seen[c]}"
         else:
             seen[c] = 0
         result.append(c)
     return result
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# EXPLAINER CLASS
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Explainer class ───────────────────────────────────────────────────────────
 
 class LoanModelExplainer:
 
     def __init__(self, model_path: str = MODEL_PATH):
-        self.model = joblib.load(model_path)
-
-        spec = importlib.util.find_spec("shap")
-        self.has_shap = spec is not None
-        self.shap = importlib.import_module("shap") if self.has_shap else None
+        self.model    = joblib.load(model_path)
+        self.has_shap = importlib.util.find_spec("shap") is not None
+        self.shap     = __import__("shap") if self.has_shap else None
 
         if self.has_shap:
-            # Use TreeExplainer for tree-based models (XGBoost, RF) — much faster
-            # than the generic shap.Explainer which may use slow KernelSHAP.
             try:
                 self.explainer = self.shap.TreeExplainer(self.model)
                 log.info("SHAP TreeExplainer initialised ✅ (fast path)")
@@ -77,232 +70,141 @@ class LoanModelExplainer:
                 log.info("SHAP generic Explainer initialised ✅ (fallback)")
         else:
             self.explainer = None
-            log.warning("SHAP is not installed; using feature-importance fallback for explanations.")
+            log.warning("SHAP not installed — using feature-importance fallback.")
 
-    def _fallback_importances(self, columns: pd.Index) -> np.ndarray:
-        try:
-            if hasattr(self.model, "feature_importances_"):
-                importances = np.asarray(self.model.feature_importances_, dtype=float)
-                if len(importances) == len(columns):
-                    return importances
-            if hasattr(self.model, "get_booster"):
-                booster = self.model.get_booster()
-                score_map = booster.get_score(importance_type="weight")
-                return np.asarray([float(score_map.get(col, 0.0)) for col in columns], dtype=float)
-        except Exception:
-            pass
-
-        return np.zeros(len(columns), dtype=float)
-
-    # ── DATA LOADING ─────────────────────────────────────────────────────────
-
-    def load_data(self, file_path: str, target_column: str):
-        df = pd.read_csv(file_path)
-
-        if target_column not in df.columns:
-            raise KeyError(f"Target '{target_column}' not found. Columns: {df.columns.tolist()}")
-
-        # Preserve raw df for sensitive attribute lookup before encoding
-        raw_df = df.copy()
-
-        X = df.drop(columns=[target_column])
-        y = df[target_column]
-
-        X = pd.get_dummies(X, drop_first=True)
+    def _load_data(self, sample: int = 500) -> tuple[pd.DataFrame, pd.Series]:
+        df    = pd.read_csv(PROCESSED_DATA_PATH)
+        X     = df.drop(columns=[TARGET_COLUMN])
+        y     = df[TARGET_COLUMN]
+        X     = pd.get_dummies(X, drop_first=True)
         X.columns = _sanitize_columns(X.columns)
-        X = X.astype("float32")
+        X     = X.astype("float32")
 
         # Align to model features
         try:
-            model_features = self.model.get_booster().feature_names
+            expected = self.model.get_booster().feature_names
         except AttributeError:
-            model_features = list(getattr(self.model, "feature_names_in_", X.columns))
+            expected = list(getattr(self.model, "feature_names_in_", X.columns))
 
-        for col in model_features:
+        for col in expected:
             if col not in X.columns:
                 X[col] = 0.0
-        X = X[model_features]
+        X = X[expected]
+        return X.sample(min(sample, len(X)), random_state=42), y.loc[X.index]
 
-        return raw_df, X, y
-
-    # ── PREDICTION ───────────────────────────────────────────────────────────
-
-    def predict(self, X: pd.DataFrame):
-        return self.model.predict(X)
-
-    # ── SHAP ─────────────────────────────────────────────────────────────────
-
-    def generate_shap_values(self, X: pd.DataFrame):
+    def generate_summary_plot(self) -> None:
         if not self.has_shap:
-            log.info("SHAP unavailable; returning no SHAP values.")
-            return None
-
-        log.info("Computing SHAP values for %d samples …", len(X))
-        return self.explainer(X)
-
-    def explain_single(self, input_df: pd.DataFrame):
-        if self.has_shap:
-            shap_values = self.explainer(input_df)
-            importance = np.abs(shap_values.values[0])
-        else:
-            importance = np.abs(self._fallback_importances(input_df.columns))
-
-        # Get top 5 important features
-        feature_names = input_df.columns
-        
-        top_idx = importance.argsort()[-5:][::-1]
-        
-        explanation = []
-        for i in top_idx:
-            explanation.append({
-                "feature": feature_names[i],
-                "impact": round(float(importance[i]), 4)
-            })
-        
-        return explanation
-
-    def save_summary_plot(self, shap_values, X: pd.DataFrame, output_dir: str) -> None:
-        if not self.has_shap or shap_values is None:
-            log.info("Skipping SHAP summary plot because SHAP is unavailable.")
+            log.warning("SHAP not available — skipping summary plot")
             return
-
-        plt.figure(figsize=(10, 6))
-        self.shap.summary_plot(shap_values, X, show=False)
+        X_sample, _ = self._load_data()
+        sv = self.explainer.shap_values(X_sample)
+        if isinstance(sv, list):
+            sv = sv[1]
+        os.makedirs(OUTPUTS_DIR, exist_ok=True)
+        plt.figure(figsize=(10, 8))
+        self.shap.summary_plot(sv, X_sample, show=False)
         plt.tight_layout()
-        path = os.path.join(output_dir, "shap_summary.png")
-        plt.savefig(path, dpi=150, bbox_inches="tight")
+        out = os.path.join(OUTPUTS_DIR, "shap_summary.png")
+        plt.savefig(out, dpi=150, bbox_inches="tight")
         plt.close()
-        log.info("SHAP summary plot → %s", path)
+        log.info("SHAP summary plot saved → %s", out)
 
-    def save_force_plot(self, shap_values, index: int, output_dir: str) -> None:
-        if not self.has_shap or shap_values is None:
-            log.info("Skipping SHAP force plot because SHAP is unavailable.")
+    def generate_force_plot(self, idx: int = 0) -> None:
+        if not self.has_shap:
+            log.warning("SHAP not available — skipping force plot")
+            return
+        X_sample, _ = self._load_data(sample=50)
+        sv           = self.explainer.shap_values(X_sample)
+        if isinstance(sv, list):
+            sv = sv[1]
+        ev = self.explainer.expected_value
+        if isinstance(ev, (list, np.ndarray)):
+            ev = ev[1]
+        os.makedirs(OUTPUTS_DIR, exist_ok=True)
+        out = os.path.join(OUTPUTS_DIR, "shap_force_plot.html")
+        self.shap.save_html(
+            out,
+            self.shap.force_plot(ev, sv[idx], X_sample.iloc[idx]),
+        )
+        log.info("SHAP force plot saved → %s", out)
+
+    def explain_single(self, X_df: pd.DataFrame) -> list[dict]:
+        """Return top-5 SHAP drivers for a single prediction."""
+        if not self.has_shap or self.explainer is None:
+            return self._fallback_importance(X_df)
+
+        try:
+            sv = self.explainer.shap_values(X_df)
+            if isinstance(sv, list):
+                sv = sv[1]
+            row   = sv[0] if sv.ndim == 2 else sv
+            pairs = list(zip(X_df.columns, row))
+            pairs.sort(key=lambda x: abs(x[1]), reverse=True)
+            return [
+                {"feature": f, "shap_value": round(float(v), 6)}
+                for f, v in pairs[:5]
+            ]
+        except Exception:
+            log.exception("explain_single SHAP failed — using fallback")
+            return self._fallback_importance(X_df)
+
+    def _fallback_importance(self, X_df: pd.DataFrame) -> list[dict]:
+        try:
+            importances = self.model.feature_importances_
+            pairs = sorted(
+                zip(X_df.columns, importances),
+                key=lambda x: x[1], reverse=True,
+            )
+            return [
+                {"feature": f, "shap_value": round(float(v), 6)}
+                for f, v in pairs[:5]
+            ]
+        except Exception:
+            return []
+
+    def generate_fairness_report(self) -> None:
+        X_sample, y_sample = self._load_data(sample=5000)
+        df = pd.read_csv(PROCESSED_DATA_PATH)
+        sensitive_col = SENSITIVE_COLUMN
+
+        if sensitive_col not in df.columns:
+            log.warning("Sensitive column '%s' not found — skipping fairness report", sensitive_col)
             return
 
-        force = self.shap.plots.force(shap_values[index])
-        path  = os.path.join(output_dir, "shap_force_plot.html")
-        self.shap.save_html(path, force)
-        log.info("SHAP force plot  → %s", path)
+        preds = self.model.predict(X_sample)
+        states = df.loc[X_sample.index, sensitive_col].values
 
-    # ── FAIRNESS ─────────────────────────────────────────────────────────────
+        lines = ["FAIRNESS REPORT — Demographic Parity by State\n", "=" * 52]
+        for state in sorted(set(states)):
+            mask       = states == state
+            approval_r = (preds[mask] == 0).mean()
+            lines.append(f"  {state:<6}  approval_rate={approval_r:.3f}  n={mask.sum()}")
 
-    def demographic_parity(self, y_pred, sensitive_attr: pd.Series) -> pd.Series:
-        """Mean prediction rate per group."""
-        df = pd.DataFrame({"prediction": y_pred, "group": sensitive_attr.values})
-        return df.groupby("group")["prediction"].mean()
-
-    def equal_opportunity(self, y_true, y_pred, sensitive_attr: pd.Series) -> dict:
-        """True-Positive Rate (recall) per group."""
-        df = pd.DataFrame({
-            "y_true": y_true.values,
-            "y_pred": y_pred,
-            "group":  sensitive_attr.values,
-        })
-        results: dict = {}
-        for group, gdf in df.groupby("group"):
-            if gdf["y_true"].nunique() < 2:
-                results[group] = 0.0
-                continue
-            tn, fp, fn, tp = confusion_matrix(gdf["y_true"], gdf["y_pred"]).ravel()
-            results[group] = round(tp / (tp + fn + 1e-9), 4)
-        return results
-
-    def check_individual_fairness(self, input_data: dict):
-        # Simple fairness heuristic
-        income = float(input_data.get("annual_inc", 0))
-        loan   = float(input_data.get("loan_amnt", 0))
-        
-        ratio = loan / (income + 1e-6)
-        
-        if ratio > 5:
-            return "⚠️ High financial risk ratio"
-        
-        return "✅ No obvious bias pattern"
-
-    def check_group_bias(self, input_data: dict):
-        """
-        Check potential bias patterns using available financial data.
-        FIX Bug 10: removed 'gender' check — gender is never collected in the
-        form so that branch was permanently dead code. Using income/loan ratio
-        as a proxy for financially-vulnerable group detection instead.
-        """
-        income    = float(input_data.get("annual_inc", 0) or 0)
-        loan      = float(input_data.get("loan_amnt",  0) or 0)
-        fico      = float(input_data.get("fico_range_low", 0) or 0)
-
-        # Flag applicants who are low-income AND have no credit history —
-        # a proxy for financially-excluded / vulnerable groups.
-        if income < 30000 and fico == 0:
-            return "⚠️ Potentially credit-invisible low-income applicant — alternative data used"
-        if income > 0 and loan / income > 4:
-            return "⚠️ High loan-to-income ratio — elevated risk for financial distress"
-
-        return "✅ No bias pattern detected"
-
-    def validate_sensitive_features(self, input_data: dict):
-        sensitive_fields = ["gender", "race", "religion"]
-
-        warnings = []
-        for field in sensitive_fields:
-            if field in input_data:
-                warnings.append(f"{field} should not influence decision")
-
-        return warnings
-
-    # ── FULL REPORT ──────────────────────────────────────────────────────────
-
-    def generate_reports(
-        self,
-        data_path:        str = PROCESSED_DATA_PATH,
-        target_column:    str = TARGET_COLUMN,
-        sensitive_column: str = SENSITIVE_COLUMN,
-        output_dir:       str = "outputs",
-    ) -> None:
-        os.makedirs(output_dir, exist_ok=True)
-
-        raw_df, X, y = self.load_data(data_path, target_column)
-
-        # Check sensitive column exists in raw (pre-encoding) df
-        if sensitive_column not in raw_df.columns:
-            log.warning("Sensitive column '%s' not found; skipping fairness metrics.", sensitive_column)
-            sensitive_col = None
-        else:
-            sensitive_col = raw_df[sensitive_column]
-
-        y_pred      = self.predict(X)
-        shap_values = self.generate_shap_values(X)
-
-        self.save_summary_plot(shap_values, X, output_dir)
-        self.save_force_plot(shap_values, index=0, output_dir=output_dir)
-
-        # Fairness report
-        report_path = os.path.join(output_dir, "fairness_report.txt")
-        with open(report_path, "w") as f:
-            if sensitive_col is not None:
-                dp = self.demographic_parity(y_pred, sensitive_col)
-                eo = self.equal_opportunity(y, y_pred, sensitive_col)
-                f.write("=== Demographic Parity (avg prediction rate per group) ===\n")
-                f.write(dp.to_string() + "\n\n")
-                f.write("=== Equal Opportunity (TPR per group) ===\n")
-                for group, tpr in eo.items():
-                    f.write(f"  {group}: {tpr:.4f}\n")
-            else:
-                f.write("Fairness metrics skipped — sensitive column not available.\n")
-
-        log.info("Fairness report → %s", report_path)
-        log.info("All reports generated ✅")
+        os.makedirs(OUTPUTS_DIR, exist_ok=True)
+        out = os.path.join(OUTPUTS_DIR, "fairness_report.txt")
+        with open(out, "w") as f:
+            f.write("\n".join(lines))
+        log.info("Fairness report saved → %s", out)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MAIN
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Convenience function used by predict.py ───────────────────────────────────
+
+_explainer_singleton: LoanModelExplainer | None = None
+
+
+def get_local_shap(X_df: pd.DataFrame) -> list[dict]:
+    """Return top-5 SHAP drivers for a single row DataFrame."""
+    global _explainer_singleton
+    if _explainer_singleton is None:
+        _explainer_singleton = LoanModelExplainer()
+    return _explainer_singleton.explain_single(X_df)
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    base = Path(__file__).resolve().parent.parent
-    explainer = LoanModelExplainer(str(MODEL_PATH))
-    explainer.generate_reports(
-        data_path=str(PROCESSED_DATA_PATH),
-        target_column=TARGET_COLUMN,
-        sensitive_column=SENSITIVE_COLUMN,
-        output_dir=str(base / "outputs"),
-    )
+    explainer = LoanModelExplainer()
+    explainer.generate_summary_plot()
+    explainer.generate_force_plot()
+    explainer.generate_fairness_report()
+    log.info("Explainability artifacts generated ✅")

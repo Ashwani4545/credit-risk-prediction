@@ -1,6 +1,6 @@
 # utils/config.py
 """
-Central configuration for AegisBank Loan Default Prediction System.
+Central configuration for Credit Risk Prediction System.
 All paths, hyperparameters, and constants live here.
 """
 
@@ -14,31 +14,31 @@ RAW_DATA_PATH       = os.path.join(BASE_DIR, "data", "raw",       "loan_dataset.
 PROCESSED_DATA_PATH = os.path.join(BASE_DIR, "data", "processed", "cleaned_data.csv")
 
 # ── MODEL ARTIFACTS ──────────────────────────────────────────────────────────
-MODEL_PATH         = os.path.join(BASE_DIR, "models", "loan_default_model.pkl")
-FEATURES_PATH      = os.path.join(BASE_DIR, "utils",  "model_features.pkl")
-METRICS_PATH       = os.path.join(BASE_DIR, "model_metrics.json")
+MODEL_PATH    = os.path.join(BASE_DIR, "models", "loan_default_model.pkl")
+FEATURES_PATH = os.path.join(BASE_DIR, "utils",  "model_features.pkl")
+METRICS_PATH  = os.path.join(BASE_DIR, "model_metrics.json")
 
 # ── PREDICTION HISTORY ───────────────────────────────────────────────────────
-HISTORY_PATH       = os.path.join(BASE_DIR, "outputs", "prediction_history.json")
+HISTORY_PATH  = os.path.join(BASE_DIR, "outputs", "prediction_history.json")
 
 # ── TARGET & SENSITIVE COLUMNS ───────────────────────────────────────────────
-TARGET_COLUMN      = "loan_status"
-SENSITIVE_COLUMN   = "addr_state"
+TARGET_COLUMN    = "loan_status"
+SENSITIVE_COLUMN = "addr_state"
 
 # ── TRAIN / TEST SPLIT ───────────────────────────────────────────────────────
 TEST_SIZE    = 0.20
 RANDOM_STATE = 42
 
-# ── XGBOOST HYPERPARAMETERS ─────────────────────────────────────────────────
+# ── XGBOOST HYPERPARAMETERS ──────────────────────────────────────────────────
+# FIX: Removed deprecated use_label_encoder (removed in XGBoost ≥ 2.0)
 XGB_PARAMS = {
-    "n_estimators":    100,
-    "max_depth":         5,
-    "learning_rate":   0.1,
-    "subsample":       0.8,
-    "colsample_bytree":0.8,
-    "eval_metric":     "logloss",
-    "random_state":    RANDOM_STATE,
-    "use_label_encoder": False,
+    "n_estimators":     100,
+    "max_depth":          5,
+    "learning_rate":    0.1,
+    "subsample":        0.8,
+    "colsample_bytree": 0.8,
+    "eval_metric":      "logloss",
+    "random_state":     RANDOM_STATE,
 }
 
 # ── RISK THRESHOLDS ──────────────────────────────────────────────────────────
@@ -48,6 +48,7 @@ RISK_LEVELS = [
     (0.80, "HIGH RISK",      "#f97316"),
     (1.01, "VERY HIGH RISK", "#ef4444"),
 ]
+
 
 def get_risk_level(probability: float) -> dict:
     """Return risk label and color for a given probability (0–1)."""
