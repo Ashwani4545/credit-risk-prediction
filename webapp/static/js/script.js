@@ -45,6 +45,40 @@ document.addEventListener("DOMContentLoaded", () => {
     }, { passive: true });
   }
 
+  // ── AUTO-CALCULATE INSTALLMENT ───────────────────────────────────────────
+  const loanInput = document.querySelector('input[name="loan_amnt"]');
+  const termSelect = document.querySelector('select[name="term"]');
+  const rateInput = document.querySelector('input[name="int_rate"]');
+  const installInput = document.querySelector('input[name="installment"]');
+
+  function calculateInstallment() {
+    if (!loanInput || !termSelect || !rateInput || !installInput) return;
+    
+    const P = parseFloat(loanInput.value);
+    const rAnnual = parseFloat(rateInput.value);
+    const termVal = termSelect.value;
+    
+    let n = 0;
+    if (termVal && termVal.includes('36')) n = 36;
+    else if (termVal && termVal.includes('60')) n = 60;
+    
+    if (P > 0 && rAnnual >= 0 && n > 0) {
+      if (rAnnual === 0) {
+        installInput.value = (P / n).toFixed(2);
+      } else {
+        const r = (rAnnual / 100) / 12;
+        const emi = (P * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+        installInput.value = emi.toFixed(2);
+      }
+    }
+  }
+
+  if (loanInput && termSelect && rateInput) {
+    loanInput.addEventListener("input", calculateInstallment);
+    rateInput.addEventListener("input", calculateInstallment);
+    termSelect.addEventListener("change", calculateInstallment);
+  }
+
   // ── RISK BAR ANIMATION (result page) ────────────────────────────────────
   const riskBar = document.querySelector(".rpt-risk-bar");
   if (riskBar) {
