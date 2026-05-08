@@ -29,7 +29,7 @@ SENSITIVE_COLUMN   = "addr_state"
 TEST_SIZE    = 0.20
 RANDOM_STATE = 42
 
-# ── XGBOOST HYPERPARAMETERS (sole algorithm used) ───────────────────────────
+# ── XGBOOST HYPERPARAMETERS ─────────────────────────────────────────────────
 XGB_PARAMS = {
     "n_estimators":    100,
     "max_depth":         5,

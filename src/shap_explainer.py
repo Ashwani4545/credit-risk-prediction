@@ -67,26 +67,20 @@ class LoanModelExplainer:
         self.shap = importlib.import_module("shap") if self.has_shap else None
 
         if self.has_shap:
-            # Delay explainer construction until we have data available.
-            # Some SHAP explainers (e.g., generic Explainer) require a masker/background
-            # dataset to be provided at construction time — creating the explainer
-            # here (without data) caused errors for non-tree models like
-            # `LogisticRegression`. We'll build the explainer in
-            # `generate_shap_values` when we have the input DataFrame.
-            self.explainer = None
-            log.info("SHAP available — explainer will be initialised when data is provided")
+            # Use TreeExplainer for tree-based models (XGBoost, RF) — much faster
+            # than the generic shap.Explainer which may use slow KernelSHAP.
+            try:
+                self.explainer = self.shap.TreeExplainer(self.model)
+                log.info("SHAP TreeExplainer initialised ✅ (fast path)")
+            except Exception:
+                self.explainer = self.shap.Explainer(self.model)
+                log.info("SHAP generic Explainer initialised ✅ (fallback)")
         else:
             self.explainer = None
             log.warning("SHAP is not installed; using feature-importance fallback for explanations.")
 
     def _fallback_importances(self, columns: pd.Index) -> np.ndarray:
         try:
-            if hasattr(self.model, "coef_"):
-                coef = np.asarray(self.model.coef_, dtype=float)
-                if coef.ndim == 2:
-                    coef = coef[0]
-                if len(coef) == len(columns):
-                    return np.abs(coef)
             if hasattr(self.model, "feature_importances_"):
                 importances = np.asarray(self.model.feature_importances_, dtype=float)
                 if len(importances) == len(columns):
@@ -144,53 +138,14 @@ class LoanModelExplainer:
             return None
 
         log.info("Computing SHAP values for %d samples …", len(X))
-
-        # Ensure explainer exists and is appropriate for the model/data.
-        if self.explainer is None:
-            # Prefer TreeExplainer for tree-based models when possible.
-            try:
-                self.explainer = self.shap.TreeExplainer(self.model)
-                log.info("SHAP TreeExplainer initialised ✅ (fast path)")
-            except Exception:
-                # For linear / scikit-learn models, the generic Explainer
-                # requires a background dataset; pass `X` so it can choose
-                # an appropriate internal explainer (LinearExplainer, etc.).
-                try:
-                    self.explainer = self.shap.Explainer(self.model, X)
-                    log.info("SHAP generic Explainer initialised ✅ (data-backed fallback)")
-                except Exception:
-                    # As a last resort, avoid raising and return None so
-                    # the rest of the pipeline can continue with fallbacks.
-                    log.exception("Failed to initialise any SHAP explainer; skipping SHAP")
-                    return None
-
-        try:
-            return self.explainer(X)
-        except Exception:
-            log.exception("Error when computing SHAP values; returning None")
-            return None
+        return self.explainer(X)
 
     def explain_single(self, input_df: pd.DataFrame):
-        shap_values = None
-
-        if self.has_shap and self.explainer is not None:
-            try:
-                shap_values = self.explainer(input_df)
-                importance = np.abs(shap_values.values[0])
-            except Exception:
-                log.exception("SHAP explanation failed; using fallback importances")
-                importance = np.abs(self._fallback_importances(input_df.columns))
+        if self.has_shap:
+            shap_values = self.explainer(input_df)
+            importance = np.abs(shap_values.values[0])
         else:
-            if hasattr(self.model, "coef_"):
-                coef = np.asarray(self.model.coef_, dtype=float)
-                if coef.ndim == 2:
-                    coef = coef[0]
-                if len(coef) == len(input_df.columns):
-                    importance = np.abs(coef * input_df.iloc[0].to_numpy(dtype=float))
-                else:
-                    importance = np.abs(self._fallback_importances(input_df.columns))
-            else:
-                importance = np.abs(self._fallback_importances(input_df.columns))
+            importance = np.abs(self._fallback_importances(input_df.columns))
 
         # Get top 5 important features
         feature_names = input_df.columns
@@ -336,48 +291,6 @@ class LoanModelExplainer:
 
         log.info("Fairness report → %s", report_path)
         log.info("All reports generated ✅")
-
-
-def get_local_shap(input_df: pd.DataFrame, model_path: str = MODEL_PATH) -> list[dict]:
-    """Return the top local feature contributions for a single prediction row."""
-
-    if not isinstance(input_df, pd.DataFrame):
-        input_df = pd.DataFrame([input_df])
-
-    explainer = LoanModelExplainer(model_path)
-
-    try:
-        shap_values = explainer.generate_shap_values(input_df)
-        if shap_values is not None:
-            values = np.asarray(shap_values.values[0], dtype=float)
-            top_idx = np.argsort(np.abs(values))[-5:][::-1]
-            explanation: list[dict] = []
-            for idx in top_idx:
-                feature_name = input_df.columns[idx]
-                impact = float(values[idx])
-                explanation.append({
-                    "feature": feature_name,
-                    "impact": round(impact, 4),
-                    "direction": "risk" if impact >= 0 else "safe",
-                    "value": input_df.iloc[0][feature_name],
-                })
-            return explanation
-    except Exception:
-        log.exception("SHAP explanation failed; using fallback explanation path")
-
-    fallback = explainer.explain_single(input_df)
-    results: list[dict] = []
-    for row in fallback:
-        feature_name = row["feature"]
-        impact = float(row["impact"])
-        value = input_df.iloc[0][feature_name] if feature_name in input_df.columns else None
-        results.append({
-            "feature": feature_name,
-            "impact": round(impact, 4),
-            "direction": "risk" if impact >= 0 else "safe",
-            "value": value,
-        })
-    return results
 
 
 # ─────────────────────────────────────────────────────────────────────────────

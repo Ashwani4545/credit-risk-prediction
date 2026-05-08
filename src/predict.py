@@ -337,11 +337,15 @@ def _prepare_model_frame(raw_input: Mapping[str, Any]) -> tuple[pd.DataFrame, di
 
     frame = engineer_features(frame)
     frame = create_features(frame)
-
     # Apply any remaining defaults for columns created during training.
-    for column, default_value in _reference_defaults().items():
-        if column not in frame.columns:
-            frame[column] = default_value
+    # Add missing columns in a single concat to avoid DataFrame fragmentation
+    # caused by many individual column inserts.
+    ref_defaults = _reference_defaults()
+    missing = [c for c in ref_defaults.keys() if c not in frame.columns]
+    if missing:
+        fill_vals = {c: ref_defaults[c] for c in missing}
+        fill_df = pd.DataFrame([fill_vals])
+        frame = pd.concat([frame.reset_index(drop=True), fill_df.reset_index(drop=True)], axis=1)
 
     encoded = pd.get_dummies(frame, drop_first=True)
     encoded.columns = sanitize_columns(encoded.columns)
@@ -350,6 +354,18 @@ def _prepare_model_frame(raw_input: Mapping[str, Any]) -> tuple[pd.DataFrame, di
     feature_names = _load_feature_names()
     encoded = encoded.reindex(columns=feature_names, fill_value=0.0)
     return encoded, raw
+
+
+def get_model_frame_debug(input_data: Mapping[str, Any]) -> tuple[dict, dict]:
+    """Return the prepared model feature vector (as JSON-serializable dict)
+    and the raw input mapping for debugging/reproducibility.
+    """
+    df, raw = _prepare_model_frame(input_data)
+    # convert to native Python types for safe printing/inspection
+    record = df.iloc[0].where(pd.notnull(df.iloc[0]), None).to_dict()
+    # ensure all values are plain floats/ints
+    cleaned = {k: (float(v) if (v is not None and not isinstance(v, (str, bool))) else v) for k, v in record.items()}
+    return cleaned, raw
 
 
 def _build_advice(probability: float, raw_input: Mapping[str, Any], prediction: int, override: bool) -> list[str]:

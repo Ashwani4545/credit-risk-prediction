@@ -1,184 +1,194 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prediction Result — Loan Default Predictor</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
-
-<!-- ── NAV ── -->
-<nav class="navbar">
-  <div class="nav-brand">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-    AI Loan <span>Default</span> Predictor
+{% extends "base.html" %} {% block title %}Assessment Result{% endblock %} {%
+block content %}
+{% set risk_color = '#22c55e' if risk == 'LOW RISK' else ('#f59e0b' if risk == 'MEDIUM RISK' else '#f97316') %}
+<div class="hero hero--result">
+  <div class="hero-inner">
+    <div class="hero-pill">✅ Assessment Complete</div>
+    <h1 class="hero-h1">Risk Analysis<br /><em>Result</em></h1>
   </div>
-  <div class="nav-links">
-    <a href="/" class="nav-link">Predict</a>
-    <a href="/dashboard" class="nav-link">Dashboard</a>
-    <a href="/about" class="nav-link">About</a>
-  </div>
-</nav>
+</div>
 
-<main class="main">
+<div class="result-shell">
+  <!-- ── MAIN VERDICT CARD ───────────────────────────────────────────────── -->
+  <div class="verdict-card" style="--risk-color: {{ risk_color }}">
+    <div class="verdict-header">
+      <div class="verdict-name">{{ borrower if borrower else 'Loan Applicant' }}</div>
+      <time class="verdict-ts">Instant Assessment</time>
+    </div>
 
-  <!-- ── RESULT HEADER ── -->
-  {% if prediction == 1 %}
-  <div class="result-header result-risk">
-    <div class="result-icon result-icon-risk">⚠</div>
-    <div>
-      <h1 class="result-verdict result-verdict-risk">Default Risk Detected</h1>
-      <p class="result-sub">This applicant shows an elevated probability of loan default based on their financial profile.</p>
-    </div>
-  </div>
-  {% else %}
-  <div class="result-header result-safe">
-    <div class="result-icon result-icon-safe">✓</div>
-    <div>
-      <h1 class="result-verdict result-verdict-safe">Low Risk — Loan Appears Safe</h1>
-      <p class="result-sub">Applicant profile is within acceptable risk parameters. Standard documentation checks recommended.</p>
-    </div>
-  </div>
-  {% endif %}
+    <div class="verdict-body">
+      <!-- Probability Gauge -->
+      <div class="gauge-wrap">
+        <svg
+          class="gauge-svg"
+          viewBox="0 0 200 120"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <!-- Track arc -->
+          <path
+            d="M 20 100 A 80 80 0 0 1 180 100"
+            fill="none"
+            stroke="rgba(255,255,255,0.08)"
+            stroke-width="14"
+            stroke-linecap="round"
+          />
+          <!-- Value arc -->
+          <path
+            id="gaugeArc"
+            d="M 20 100 A 80 80 0 0 1 180 100"
+            fill="none"
+            stroke="{{ risk_color }}"
+            stroke-width="14"
+            stroke-linecap="round"
+            stroke-dasharray="251.2"
+            stroke-dashoffset="{{ 251.2 - (prob * 251.2) }}"
+            style="
+              transition: stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+            "
+          />
+          <!-- Center text -->
+          <text
+            x="100"
+            y="88"
+            text-anchor="middle"
+            font-family="Syne"
+            font-weight="700"
+            font-size="28"
+            fill="{{ risk_color }}"
+          >
+            {{ (prob * 100) | round(2) }}%
+          </text>
+          <text
+            x="100"
+            y="108"
+            text-anchor="middle"
+            font-family="DM Sans"
+            font-size="10"
+            fill="rgba(255,255,255,0.45)"
+            letter-spacing="1.5"
+          >
+            DEFAULT PROB.
+          </text>
+        </svg>
+      </div>
 
-  <!-- ── METRICS ── -->
-  <div class="metrics-grid">
-    <div class="metric-card">
-      <div class="metric-val {% if prediction == 1 %}text-risk{% else %}text-safe{% endif %}">
-        {{ probability }}%
+      <!-- Risk badge -->
+      <div
+        class="risk-badge"
+        style="color: var(--risk-color); border-color: color-mix(in srgb, var(--risk-color) 20%, transparent); background: color-mix(in srgb, var(--risk-color) 12%, transparent)"
+      >
+        {% if show_warning %}⚠️{% else %}✅{% endif %} {{ risk }}
       </div>
-      <div class="metric-lbl">Default Probability</div>
-    </div>
-    <div class="metric-card">
-      <div class="metric-val">
-        {% if probability >= 70 %}High
-        {% elif probability >= 40 %}Medium
-        {% else %}Low{% endif %}
-      </div>
-      <div class="metric-lbl">Risk Category</div>
-    </div>
-    <div class="metric-card">
-      <div class="metric-val">
-        {% if prediction == 1 %}Reject{% else %}Approve{% endif %}
-      </div>
-      <div class="metric-lbl">Recommended Action</div>
-    </div>
-    <div class="metric-card">
-      <div class="metric-val">XGBoost</div>
-      <div class="metric-lbl">Model Used</div>
-    </div>
-  </div>
 
-  <!-- ── PROBABILITY BAR ── -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-      </div>
-      <div><h2>Default Probability Score</h2><p>Calibrated output from predict_proba()</p></div>
-    </div>
-    <div class="card-body">
-      <div class="prob-bar-labels">
-        <span>Safe (0%)</span>
-        <span>High Risk (100%)</span>
-      </div>
-      <div class="prob-bar-track">
-        <div
-          class="prob-bar-fill {% if prediction == 1 %}prob-bar-risk{% else %}prob-bar-safe{% endif %}"
-          style="width: {{ probability }}%;"
-          data-target="{{ probability }}"
-        ></div>
-      </div>
-      <div class="prob-bar-zones">
-        <div class="prob-zone" style="color:var(--success);">▸ Low (&lt;40%)</div>
-        <div class="prob-zone" style="color:var(--warning);">▸ Medium (40–70%)</div>
-        <div class="prob-zone" style="color:var(--danger);">▸ High (&gt;70%)</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── SHAP FEATURES ── -->
-  {% if shap_values %}
-  <div class="card">
-    <div class="card-header">
-      <div class="card-icon" style="background:#ede9fe;color:#7c3aed;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      </div>
-      <div>
-        <h2>Feature Impact (SHAP Analysis)</h2>
-        <p>Red bars increase default risk · Green bars decrease default risk</p>
-      </div>
-    </div>
-    <div class="card-body">
-      {% set max_abs = namespace(val=0.001) %}
-      {% for row in shap_values %}
-        {% if row.impact | abs > max_abs.val %}
-          {% set max_abs.val = row.impact | abs %}
+      <!-- Verdict line -->
+      <div class="verdict-line {% if show_warning %}verdict-risk{% else %}verdict-safe{% endif %}">
+        {% if show_warning %}
+        Default Risk Detected — Enhanced Review Required
+        {% else %}
+        Safe Borrower — No Immediate Risk
         {% endif %}
-      {% endfor %}
+      </div>
+    </div>
+  </div>
 
-      {% for row in shap_values %}
-      {% set bar_pct = ((row.impact | abs) / max_abs.val * 100) | round(1) %}
-      <div class="shap-row">
-        <span class="shap-feature">{{ row.feature }}</span>
-        <div class="shap-bar-track">
-          <div
-            class="shap-bar-fill {% if row.direction == 'risk' %}shap-risk{% else %}shap-safe{% endif %}"
-            style="width: {{ bar_pct }}%;"
-          ></div>
+  <!-- ── DETAILS GRID ────────────────────────────────────────────────────── -->
+  <div class="detail-grid">
+    <div class="detail-card">
+      <div class="dc-label">Probability of Default</div>
+      <div class="dc-value">{{ (prob * 100) | round(2) }}%</div>
+    </div>
+    <div class="detail-card">
+      <div class="dc-label">Risk Category</div>
+      <div class="dc-value">{{ risk }}</div>
+    </div>
+    <div class="detail-card">
+      <div class="dc-label">Warning State</div>
+      <div class="dc-value">{{ "Review Needed" if show_warning else "No Warning" }}</div>
+    </div>
+    <div class="detail-card">
+      <div class="dc-label">Recommendation</div>
+      <div class="dc-value">{{ verdict }}</div>
+    </div>
+  </div>
+
+  <!-- ── SHAP EXPLANATION ─────────────────────────────────────────────── -->
+  {% if top_features %}
+
+  {# Emit bar widths/colours as a proper <style> block so the CSS linter   #}
+  {# never sees Jinja2 {{ }} tokens inside a style="" attribute.           #}
+  <style>
+    {% for feat in top_features %}
+    {% set bar_pct = [((feat.impact / top_features[0].impact) * 100) | round(0) | int, 4] | max %}
+    .shap-bar-{{ loop.index }} {
+      width: {{ bar_pct }}%;
+      background: {{ risk_color }};
+    }
+    .shap-value-{{ loop.index }} { color: {{ risk_color }}; }
+    {% endfor %}
+  </style>
+
+  <div class="form-card" style="margin-top:1.5rem;">
+    <h3 class="section-head"><span class="section-num">🔍</span> Why this decision? — Top Driving Factors</h3>
+    <p style="color:rgba(255,255,255,0.5);font-size:0.85rem;margin-bottom:1rem;">
+      SHAP values show the contribution of each feature to the default probability.
+      Higher impact = stronger influence on the prediction.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:0.6rem;">
+      {% for feat in top_features %}
+      <div style="display:flex;align-items:center;gap:0.8rem;">
+        <div style="min-width:180px;font-size:0.85rem;color:rgba(255,255,255,0.8);font-family:monospace;">
+          {{ feat.feature | replace('_',' ') | title }}
         </div>
-        <span class="shap-val {% if row.direction == 'risk' %}text-risk{% else %}text-safe{% endif %}">
-          {{ "%+.3f"|format(row.impact) }}
-        </span>
-        <span class="shap-raw">{{ row.value }}</span>
+        <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:6px;height:10px;overflow:hidden;">
+          <!-- bar fill: width + colour come from the style block above -->
+          <div class="shap-bar shap-bar-{{ loop.index }}"
+               style="height:100%;border-radius:6px;transition:width 0.8s ease;"
+               aria-hidden="true">&nbsp;</div>
+        </div>
+        <div class="shap-value-{{ loop.index }}"
+             style="min-width:55px;text-align:right;font-size:0.83rem;font-weight:600;">
+          {{ feat.impact }}
+        </div>
       </div>
       {% endfor %}
-
-      <div class="shap-legend">
-        <span class="legend-item"><span class="legend-dot legend-risk"></span>Increases default risk</span>
-        <span class="legend-item"><span class="legend-dot legend-safe"></span>Decreases default risk</span>
-      </div>
     </div>
   </div>
   {% endif %}
 
-  <!-- ── ADVICE ── -->
-  {% if advice %}
-  <div class="card {% if prediction == 1 %}card-risk-tint{% else %}card-safe-tint{% endif %}">
-    <div class="card-header">
-      <div class="card-icon" style="background:#dbeafe;color:#1d4ed8;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+  <!-- ── FINANCIAL RISK BREAKDOWN (FIX Bug 13) ─────────────────────────── -->
+  <div class="form-card" style="margin-top:1.5rem;">
+    <h3 class="section-head"><span class="section-num">💰</span> Financial Risk Breakdown</h3>
+    <div class="detail-grid" style="margin-top:0.8rem;">
+      <div class="detail-card">
+        <div class="dc-label">Loan Amount</div>
+        <div class="dc-value">${{ "{:,.0f}".format(loan_amnt) if loan_amnt else '—' }}</div>
       </div>
-      <div><h2>Analyst Recommendations</h2><p>Actionable steps based on applicant profile</p></div>
-    </div>
-    <div class="card-body">
-      <ul class="advice-list">
-        {% for item in advice %}
-        <li class="advice-item">
-          <span class="advice-dot"></span>
-          {{ item }}
-        </li>
-        {% endfor %}
-      </ul>
+      <div class="detail-card">
+        <div class="dc-label">PD (Prob. of Default)</div>
+        <div class="dc-value">{{ (pd_value * 100) | round(2) }}%</div>
+      </div>
+      <div class="detail-card">
+        <div class="dc-label">LGD (Loss Given Default)</div>
+        <div class="dc-value">{{ (lgd * 100) | round(0) | int }}%</div>
+      </div>
+      <div class="detail-card">
+        <div class="dc-label">Expected Loss</div>
+        <div class="dc-value" style="color:#f97316;">${{ "{:,.2f}".format(expected_loss) if expected_loss else '—' }}</div>
+      </div>
+      <div class="detail-card">
+        <div class="dc-label">Expected Profit</div>
+        <div class="dc-value" style="color:{% if expected_profit and expected_profit > 0 %}#22c55e{% else %}#f97316{% endif %};">
+          ${{ "{:,.2f}".format(expected_profit) if expected_profit else '—' }}
+        </div>
+      </div>
     </div>
   </div>
-  {% endif %}
 
-  <!-- ── BACK BUTTON ── -->
-  <div style="text-align:center; margin: 2rem 0;">
-    <a href="/" class="btn-back">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-      New Prediction
-    </a>
+  <!-- ── ACTIONS ─────────────────────────────────────────────────────────── -->
+  <div class="result-actions">
+    <a href="/" class="btn btn-ghost">← New Assessment</a>
+    <a href="/history" class="btn btn-ghost">History</a>
   </div>
+</div>
+{% endblock %}
 
-</main>
-
-<footer class="footer">
-  AI Loan Default Predictor — Academic Project · Built with Flask, XGBoost &amp; SHAP
-</footer>
-
-<script src="{{ url_for('static', filename='js/script.js') }}"></script>
-</body>
-</html>
