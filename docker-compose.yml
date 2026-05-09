@@ -1,0 +1,22 @@
+# docker-compose.yml
+# FIX: 'build:' had no context key — Docker Compose threw a parse error.
+# FIX: Removed deprecated top-level 'version:' key (ignored in Compose v2+).
+
+services:
+  loan-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: loan_default_app
+    ports:
+      - "5000:5000"
+    restart: always
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Persist model artefacts, data, outputs, and logs across container restarts
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+      - ./reports:/app/reports

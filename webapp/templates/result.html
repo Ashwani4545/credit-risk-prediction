@@ -118,7 +118,7 @@ block content %}
   {# never sees Jinja2 {{ }} tokens inside a style="" attribute.           #}
   <style>
     {% for feat in top_features %}
-    {% set bar_pct = [((feat.impact / top_features[0].impact) * 100) | round(0) | int, 4] | max %}
+    {% set bar_pct = [((feat.shap_value if feat.shap_value is defined else feat.impact / top_features[0].impact) * 100) | round(0) | int, 4] | max %}
     .shap-bar-{{ loop.index }} {
       width: {{ bar_pct }}%;
       background: {{ risk_color }};
@@ -147,7 +147,7 @@ block content %}
         </div>
         <div class="shap-value-{{ loop.index }}"
              style="min-width:55px;text-align:right;font-size:0.83rem;font-weight:600;">
-          {{ feat.impact }}
+          {{ feat.shap_value if feat.shap_value is defined else feat.impact }}
         </div>
       </div>
       {% endfor %}

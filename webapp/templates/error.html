@@ -1,44 +1,35 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Error — Loan Default Predictor</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
+{% extends "base.html" %}
+{% block title %}Error{% endblock %}
 
-<nav class="navbar">
-  <div class="nav-brand">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-    AI Loan <span>Default</span> Predictor
+{% block content %}
+{# FIX: error.html was a standalone HTML file that duplicated the <head>,
+   <nav>, and <footer> from base.html instead of extending it.
+   This meant style updates to base.html were not reflected here,
+   and the nav active-state logic was missing. #}
+<div class="hero">
+  <div class="hero-inner hero-inner--center">
+    <div class="hero-pill">⚠️ System Error</div>
+    <h1 class="hero-h1">Something<br /><em>Went Wrong</em></h1>
   </div>
-  <div class="nav-links">
-    <a href="/" class="nav-link">Predict</a>
-    <a href="/dashboard" class="nav-link">Dashboard</a>
-    <a href="/about" class="nav-link">About</a>
-  </div>
-</nav>
+</div>
 
-<main class="main" style="text-align:center; padding-top: 4rem;">
-  <div class="card" style="max-width:540px; margin:0 auto;">
-    <div class="card-body" style="padding: 2.5rem 2rem;">
-      <div style="font-size:3rem; margin-bottom:1rem;">⚠️</div>
-      <h2 style="font-size:1.25rem; margin-bottom:0.5rem;">Something went wrong</h2>
-      <p style="color:var(--text2); font-size:0.875rem; margin-bottom:1.5rem;">
-        The prediction could not be completed. This usually means the model file is missing.
-        Run <code>python src/train_model.py</code> to generate it.
-      </p>
-      {% if error %}
-      <pre class="code-block" style="text-align:left; font-size:0.78rem; margin-bottom:1.5rem;">{{ error }}</pre>
-      {% endif %}
-      <a href="/" class="btn-back">← Try Again</a>
+<div class="form-shell" style="max-width:600px;">
+  <div class="alert alert-error" style="text-align:center; padding:2rem;">
+    <div style="font-size:2.5rem; margin-bottom:1rem;">⚠️</div>
+    <strong style="font-size:1.1rem;">Prediction could not be completed</strong>
+    <p style="margin-top:0.75rem; color:rgba(255,255,255,0.6); font-size:0.9rem;">
+      This usually means the model file is missing or corrupted.<br>
+      Run <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;">python -m src.train_model</code> to generate it.
+    </p>
+
+    {% if error %}
+    <pre style="margin-top:1.25rem;background:rgba(0,0,0,0.3);border-radius:8px;padding:1rem;text-align:left;font-size:0.78rem;overflow-x:auto;color:rgba(255,255,255,0.75);">{{ error }}</pre>
+    {% endif %}
+
+    <div style="margin-top:1.5rem;display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap;">
+      <a href="/" class="btn btn-outline">← Try Again</a>
+      <a href="/health" class="btn btn-ghost">Health Check</a>
     </div>
   </div>
-</main>
-
-<footer class="footer">
-  AI Loan Default Predictor — Academic Project
-</footer>
-</body>
-</html>
+</div>
+{% endblock %}

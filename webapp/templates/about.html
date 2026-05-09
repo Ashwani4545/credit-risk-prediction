@@ -1,235 +1,159 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>About — Loan Default Predictor</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
+{% extends "base.html" %}
+{% block title %}About{% endblock %}
 
-<nav class="navbar">
-  <div class="nav-brand">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-    AI Loan <span>Default</span> Predictor
+{% block content %}
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-pill">ℹ️ System Info</div>
+    <h1 class="hero-h1">How It<br /><em>Works</em></h1>
+    <p class="hero-sub">Architecture, data pipeline, model details, and fairness metrics.</p>
   </div>
-  <div class="nav-links">
-    <a href="/" class="nav-link">Predict</a>
-    <a href="/dashboard" class="nav-link">Dashboard</a>
-    <a href="/about" class="nav-link active">About</a>
-  </div>
-</nav>
+</div>
 
-<main class="main">
-
-  <div class="page-title">
-    <h1>How It Works</h1>
-    <p>System architecture, data pipeline, model details, and fairness metrics</p>
-  </div>
+<div class="dash-shell">
 
   <!-- ── OVERVIEW ── -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-      </div>
-      <div><h2>Project Overview</h2><p>AI-Based Loan Default Prediction System</p></div>
+  <div class="dash-card">
+    <div class="dash-card-header">
+      <span class="dash-card-title">Project Overview</span>
+      <span class="dash-card-sub">AI-Based Loan Default Prediction System</span>
     </div>
-    <div class="card-body">
-      <p class="about-para">
-        This system predicts whether a loan applicant is likely to default based on their financial profile.
-        A trained <strong>XGBoost classifier</strong> processes 36 engineered features from real lending data,
-        wrapped in a <strong>Flask</strong> web application with SHAP-based explainability and PSI-based
-        data drift monitoring.
-      </p>
-      <div class="tech-stack">
-        <div class="tech-tag-label">Tech Stack</div>
-        <div class="tech-tags">
-          <span class="tech-tag">Python 3.x</span>
-          <span class="tech-tag">Flask</span>
-          <span class="tech-tag">XGBoost</span>
-          <span class="tech-tag">scikit-learn</span>
-          <span class="tech-tag">SHAP</span>
-          <span class="tech-tag">pandas</span>
-          <span class="tech-tag">NumPy</span>
-          <span class="tech-tag">imbalanced-learn</span>
-          <span class="tech-tag">joblib</span>
-          <span class="tech-tag">matplotlib</span>
-        </div>
-      </div>
+    <p style="color:var(--tx-2); line-height:1.7; margin-bottom:1rem;">
+      This system predicts whether a loan applicant is likely to default based on their financial
+      profile. A trained <strong style="color:var(--tx-1);">XGBoost classifier</strong> processes
+      engineered features from real lending data, wrapped in a
+      <strong style="color:var(--tx-1);">Flask</strong> web application with SHAP-based
+      explainability and PSI-based drift monitoring.
+    </p>
+    <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
+      {% for tag in ['Python 3.11', 'Flask', 'XGBoost', 'scikit-learn', 'SHAP', 'pandas', 'NumPy', 'imbalanced-learn', 'joblib', 'matplotlib', 'Docker'] %}
+      <span style="background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold-border);border-radius:6px;padding:3px 10px;font-size:0.8rem;font-family:'DM Mono',monospace;">
+        {{ tag }}
+      </span>
+      {% endfor %}
     </div>
   </div>
 
   <!-- ── PIPELINE ── -->
-  <div class="section-label" style="margin: 1.5rem 0 0.75rem;">ML Pipeline — 8 Stages</div>
-  <div class="pipeline-grid">
-
-    <div class="pipeline-step">
-      <div class="pipeline-num">01</div>
-      <h3>Data Ingestion</h3>
-      <p>Raw CSV loaded from <code>data/raw/loan_dataset.csv</code>. Shape, dtype, and null counts validated on startup.</p>
+  <div class="dash-card" style="margin-top:1.25rem;">
+    <div class="dash-card-header">
+      <span class="dash-card-title">ML Pipeline — 7 Stages</span>
+      <span class="dash-card-sub">End-to-end from raw CSV to live prediction</span>
     </div>
-
-    <div class="pipeline-step">
-      <div class="pipeline-num">02</div>
-      <h3>Data Cleaning</h3>
-      <p>Deduplication, median imputation for numeric columns, mode imputation for categorical columns.</p>
-    </div>
-
-    <div class="pipeline-step">
-      <div class="pipeline-num">03</div>
-      <h3>Feature Engineering</h3>
-      <p>Derives <em>debt-to-income ratio</em>, <em>loan-to-income ratio</em>, <em>credit utilization</em>, <em>employment stability</em>, and <em>income category</em>.</p>
-    </div>
-
-    <div class="pipeline-step">
-      <div class="pipeline-num">04</div>
-      <h3>Encoding & Scaling</h3>
-      <p>LabelEncoder for categoricals. StandardScaler fitted on training set, applied to test set. Scaler serialized via joblib.</p>
-    </div>
-
-    <div class="pipeline-step">
-      <div class="pipeline-num">05</div>
-      <h3>Class Balancing</h3>
-      <p>SMOTE (Synthetic Minority Over-sampling Technique) applied to training set to handle the natural class imbalance in lending data.</p>
-    </div>
-
-    <div class="pipeline-step">
-      <div class="pipeline-num">06</div>
-      <h3>Model Training</h3>
-      <p>Three models compared — Logistic Regression, Random Forest, XGBoost — with 5-fold cross-validation. Best model saved via joblib.</p>
-    </div>
-
-    <div class="pipeline-step">
-      <div class="pipeline-num">07</div>
-      <h3>SHAP Explainability</h3>
-      <p>SHAP TreeExplainer generates per-prediction feature attribution. Summary and force plots exported to <code>outputs/</code>.</p>
-    </div>
-
-    <div class="pipeline-step">
-      <div class="pipeline-num">08</div>
-      <h3>Drift Monitoring</h3>
-      <p>PSI computed for 5 key features between training distribution and new data. Alerts fired when PSI &gt; 0.25.</p>
-    </div>
-
-  </div>
-
-  <!-- ── FILE STRUCTURE ── -->
-  <div class="card" style="margin-top:1.5rem;">
-    <div class="card-header">
-      <div class="card-icon" style="background:#f0fdf4;color:#15803d;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+    <div class="tile-row" style="flex-wrap:wrap; gap:1rem; margin-top:0.75rem;">
+      {% set steps = [
+        ('01', 'Data Ingestion',       'Raw CSV loaded from data/raw/. Null counts and dtypes validated.'),
+        ('02', 'Data Cleaning',        'Deduplication, median imputation (numeric), mode imputation (categorical).'),
+        ('03', 'Feature Engineering',  'Derives loan_to_income, credit_utilization, payment_capacity, risk_score, and binary flags.'),
+        ('04', 'Class Balancing',      'SMOTE applied on the training split only — prevents data leakage into the test set.'),
+        ('05', 'Model Training',       'Single XGBoost model with GridSearchCV (recall-optimised). Optimal threshold found via Youden\'s J.'),
+        ('06', 'SHAP Explainability',  'TreeExplainer generates per-prediction feature attribution. Summary + force plots saved.'),
+        ('07', 'Drift Monitoring',     'PSI computed for key features. PSI ≥ 0.25 triggers retraining.'),
+      ] %}
+      {% for num, title, desc in steps %}
+      <div style="flex:1;min-width:260px;background:var(--navy-2);border-radius:var(--radius-sm);padding:1rem 1.25rem;border:1px solid var(--border);">
+        <div style="font-family:'DM Mono',monospace;color:var(--gold);font-size:0.75rem;margin-bottom:0.35rem;">{{ num }}</div>
+        <div style="font-weight:600;color:var(--tx-1);margin-bottom:0.35rem;">{{ title }}</div>
+        <div style="color:var(--tx-2);font-size:0.83rem;line-height:1.55;">{{ desc }}</div>
       </div>
-      <div><h2>Project Structure</h2><p>Directory layout and module responsibilities</p></div>
-    </div>
-    <div class="card-body">
-      <pre class="code-block">loan_default_project/
-├── webapp/
-│   ├── app.py                  ← Flask application (routes)
-│   ├── templates/
-│   │   ├── index.html          ← Prediction form
-│   │   ├── result.html         ← Result + SHAP display
-│   │   ├── dashboard.html      ← Model metrics + drift
-│   │   ├── about.html          ← This page
-│   │   └── error.html          ← Error handler
-│   └── static/
-│       ├── css/style.css       ← All styling
-│       └── js/script.js        ← Form UX + animations
-│
-├── src/
-│   ├── data_preprocessing.py   ← Clean → engineer → encode → SMOTE
-│   ├── train_model.py          ← Train 3 models, save best
-│   ├── evaluate_model.py       ← Metrics, plots, reports
-│   ├── predict.py              ← Inference + advice generation
-│   └── shap_explainer.py       ← SHAP + fairness reports
-│
-├── monitoring/
-│   └── drift_detection.py      ← PSI drift monitoring
-│
-├── utils/
-│   └── config.py               ← All paths, params, constants
-│
-├── data/
-│   ├── raw/loan_dataset.csv    ← Original dataset
-│   ├── processed/cleaned.csv   ← After preprocessing
-│   ├── train.csv               ← Reference for drift monitoring
-│   └── new_data.csv            ← Incoming data for drift check
-│
-├── models/
-│   └── loan_default_model.pkl  ← Trained model (joblib)
-│
-├── outputs/                    ← Plots, reports, fairness
-└── requirements.txt</pre>
+      {% endfor %}
     </div>
   </div>
 
   <!-- ── HOW TO RUN ── -->
-  <div class="card" style="margin-top:1rem;">
-    <div class="card-header">
-      <div class="card-icon" style="background:#fef3c7;color:#d97706;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      </div>
-      <div><h2>How to Run</h2><p>Step-by-step execution order</p></div>
+  <div class="dash-card" style="margin-top:1.25rem;">
+    <div class="dash-card-header">
+      <span class="dash-card-title">How to Run</span>
+      <span class="dash-card-sub">Step-by-step execution order</span>
     </div>
-    <div class="card-body">
-      <pre class="code-block"># 1. Install dependencies
+    <pre style="background:var(--navy-2);border-radius:var(--radius-sm);padding:1.1rem 1.3rem;font-family:'DM Mono',monospace;font-size:0.82rem;color:var(--tx-1);overflow-x:auto;border:1px solid var(--border);margin-top:0.75rem;"># 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Preprocess data (clean, engineer, encode, SMOTE)
-python src/data_preprocessing.py
+# 2. Preprocess data (clean + engineer features)
+python -m src.data_preprocessing
 
-# 3. Train and save best model
-python src/train_model.py
+# 3. Train XGBoost model (includes SMOTE + GridSearchCV)
+python -m src.train_model
 
-# 4. Evaluate model (generates plots in outputs/)
-python src/evaluate_model.py
+# 4. Evaluate model (optional — overwrites model_metrics.json)
+python -m src.evaluate_model
 
 # 5. Generate SHAP + fairness reports
-python src/shap_explainer.py
+python -m src.shap_explainer
 
 # 6. Run drift monitoring
-python monitoring/drift_detection.py
+python -m monitoring.drift_detection
 
 # 7. Start the web app
-python webapp/app.py
-# → Open: http://localhost:5000</pre>
+python -m webapp.app
+# → Open: http://127.0.0.1:5000
+
+# Docker (alternative)
+docker compose up --build</pre>
+  </div>
+
+  <!-- ── PROJECT STRUCTURE ── -->
+  <div class="dash-card" style="margin-top:1.25rem;">
+    <div class="dash-card-header">
+      <span class="dash-card-title">Project Structure</span>
+      <span class="dash-card-sub">Directory layout and module responsibilities</span>
     </div>
+    <pre style="background:var(--navy-2);border-radius:var(--radius-sm);padding:1.1rem 1.3rem;font-family:'DM Mono',monospace;font-size:0.82rem;color:var(--tx-1);overflow-x:auto;border:1px solid var(--border);margin-top:0.75rem;">credit-risk-prediction/
+├── src/
+│   ├── data_preprocessing.py   ← Clean + engineer features → processed CSV
+│   ├── train_model.py          ← Train XGBoost, save model + feature list
+│   ├── evaluate_model.py       ← Standalone evaluation + metrics JSON
+│   ├── predict.py              ← Single-applicant inference (used by Flask)
+│   ├── shap_explainer.py       ← SHAP plots + fairness report  ← canonical
+│   └── generate_performance_plots.py
+├── monitoring/
+│   └── drift_detection.py      ← PSI-based drift monitor
+├── webapp/
+│   ├── app.py                  ← Flask application
+│   ├── retrain.py              ← Subprocess retraining helper
+│   ├── templates/              ← Jinja2 HTML templates
+│   └── static/                 ← CSS + JS
+├── scripts/
+│   └── reproduce_prediction.py ← Replay any stored prediction
+├── utils/
+│   ├── config.py               ← Central config (all paths + constants)
+│   └── preprocessor.py         ← Artefact validator
+├── data/raw/                   ← Put loan_dataset.csv here
+├── models/                     ← Saved model artefacts
+├── outputs/                    ← SHAP plots, drift charts
+├── logs/                       ← Append-only audit log
+├── reports/                    ← Per-borrower risk reports
+├── feedback_loop.py            ← Continuous learning data builder
+├── governance.py               ← Audit trail writer
+├── test_predict.py             ← Smoke test
+├── Dockerfile
+├── docker-compose.yml
+└── requirements.txt</pre>
   </div>
 
   <!-- ── FAIRNESS ── -->
-  <div class="card" style="margin-top:1rem;">
-    <div class="card-header">
-      <div class="card-icon" style="background:#fee2e2;color:#b91c1c;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      </div>
-      <div><h2>Fairness &amp; Ethics</h2><p>Demographic parity and equal opportunity metrics</p></div>
+  <div class="dash-card" style="margin-top:1.25rem;">
+    <div class="dash-card-header">
+      <span class="dash-card-title">Fairness &amp; Ethics</span>
+      <span class="dash-card-sub">Demographic parity and equal opportunity metrics</span>
     </div>
-    <div class="card-body">
-      <p class="about-para">
-        The <code>shap_explainer.py</code> module computes two fairness metrics across the
-        <code>home_ownership</code> sensitive attribute to detect discriminatory model behaviour.
-      </p>
-      <div class="two-col" style="margin-top:1rem;">
-        <div class="info-box">
-          <strong>Demographic Parity</strong><br>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:0.75rem;">
+      <div style="background:var(--navy-2);border-radius:var(--radius-sm);padding:1rem 1.2rem;border:1px solid var(--border);">
+        <strong style="color:var(--tx-1);">Demographic Parity</strong><br>
+        <span style="color:var(--tx-2);font-size:0.85rem;line-height:1.6;">
           Measures whether the positive prediction rate is equal across groups.
-          A large gap indicates potential selection bias against certain groups.
-        </div>
-        <div class="info-box">
-          <strong>Equal Opportunity</strong><br>
-          Compares True Positive Rate (recall) across groups. Unequal TPR means the model
-          makes different error types depending on group membership.
-        </div>
+          A large gap indicates potential selection bias.
+        </span>
+      </div>
+      <div style="background:var(--navy-2);border-radius:var(--radius-sm);padding:1rem 1.2rem;border:1px solid var(--border);">
+        <strong style="color:var(--tx-1);">Equal Opportunity</strong><br>
+        <span style="color:var(--tx-2);font-size:0.85rem;line-height:1.6;">
+          Compares True Positive Rate per group. Unequal TPR means the model
+          makes different error types by group membership.
+        </span>
       </div>
     </div>
   </div>
 
-</main>
-
-<footer class="footer">
-  AI Loan Default Predictor — Academic Project · Built with Flask, XGBoost &amp; SHAP
-</footer>
-
-<script src="{{ url_for('static', filename='js/script.js') }}"></script>
-</body>
-</html>
+</div>
+{% endblock %}

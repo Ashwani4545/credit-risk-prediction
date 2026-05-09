@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Models (large binaries)
+models/*.pkl
+models/*.joblib
+
+# Data (may contain PII)
+data/raw/
+data/processed/
+
+# Outputs & logs
+outputs/
+logs/
+reports/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

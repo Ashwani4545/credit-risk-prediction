@@ -1,0 +1,25 @@
+# .dockerignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.git
+.gitignore
+.venv/
+venv/
+
+# Don't copy notebooks or docs into the image
+notebooks/
+*.md
+*.ipynb
+*.txt
+!requirements.txt
+
+# Don't copy large data or model files (mount via volumes instead)
+data/raw/
+data/processed/
+models/
+outputs/
+logs/
+reports/

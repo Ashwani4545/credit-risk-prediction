@@ -1,7 +1,7 @@
 # utils/config.py
 """
-Central configuration for Next-Gen Credit Risk Prediction System.
-Refactored for Dynamic Risk Thresholding and Macro-Aware Learning.
+Central configuration for Credit Risk Prediction System.
+All paths, hyperparameters, and constants live here.
 """
 
 import os
@@ -13,53 +13,46 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW_DATA_PATH       = os.path.join(BASE_DIR, "data", "raw",       "loan_dataset.csv")
 PROCESSED_DATA_PATH = os.path.join(BASE_DIR, "data", "processed", "cleaned_data.csv")
 
-# ── MODEL ARTIFACTS (Glass-Box EBM) ──────────────────────────────────────────
-MODEL_PATH    = os.path.join(BASE_DIR, "models", "loan_ebm_model.pkl")
+# ── MODEL ARTIFACTS ──────────────────────────────────────────────────────────
+MODEL_PATH    = os.path.join(BASE_DIR, "models", "loan_default_model.pkl")
 FEATURES_PATH = os.path.join(BASE_DIR, "utils",  "model_features.pkl")
 METRICS_PATH  = os.path.join(BASE_DIR, "model_metrics.json")
 
-# ── AUDIT & GOVERNANCE PATHS ─────────────────────────────────────────────────
-HISTORY_PATH   = os.path.join(BASE_DIR, "outputs", "prediction_history.json")
-AUDIT_LOG_PATH = os.path.join(BASE_DIR, "logs", "audit_log.json")
-FAIRNESS_PATH  = os.path.join(BASE_DIR, "outputs", "fairness_report.txt")
+# ── PREDICTION HISTORY ───────────────────────────────────────────────────────
+HISTORY_PATH  = os.path.join(BASE_DIR, "outputs", "prediction_history.json")
 
-# ── TARGET & SENSITIVE ATTRIBUTES ───────────────────────────────────────────
+# ── TARGET & SENSITIVE COLUMNS ───────────────────────────────────────────────
 TARGET_COLUMN    = "loan_status"
-SENSITIVE_COLUMN = "addr_state" # Used for real-time Fairness Auditing
+SENSITIVE_COLUMN = "addr_state"
 
-# ── TRAIN / TEST SPLIT (Stratified for Imbalance) ──────────────────────────
+# ── TRAIN / TEST SPLIT ───────────────────────────────────────────────────────
 TEST_SIZE    = 0.20
 RANDOM_STATE = 42
 
-# ── DYNAMIC RISK THRESHOLDING LOGIC ──────────────────────────────────────────
-# Base thresholds for "Standard" economic conditions.
-DEFAULT_THRESHOLDS = [
+# ── XGBOOST HYPERPARAMETERS ──────────────────────────────────────────────────
+# FIX: Removed deprecated use_label_encoder (removed in XGBoost ≥ 2.0)
+XGB_PARAMS = {
+    "n_estimators":     100,
+    "max_depth":          5,
+    "learning_rate":    0.1,
+    "subsample":        0.8,
+    "colsample_bytree": 0.8,
+    "eval_metric":      "logloss",
+    "random_state":     RANDOM_STATE,
+}
+
+# ── RISK THRESHOLDS ──────────────────────────────────────────────────────────
+RISK_LEVELS = [
     (0.40, "LOW RISK",       "#22c55e"),
     (0.60, "MEDIUM RISK",    "#f59e0b"),
     (0.80, "HIGH RISK",      "#f97316"),
     (1.01, "VERY HIGH RISK", "#ef4444"),
 ]
 
-def get_risk_level(probability: float, macro_stress: float = 0.0) -> dict:
-    """
-    Returns risk label and color adjusted by live Macro Telemetry.
-    As economic stress increases, risk boundaries become more conservative.
-    """
-    # Shift thresholds downward as macro-economic stress increases
-    # e.g., if stress is 0.1, a 0.3 probability becomes "MEDIUM RISK"
-    adjustment = macro_stress * 0.5
-    
-    for base_threshold, label, color in DEFAULT_THRESHOLDS:
-        adjusted_threshold = base_threshold - adjustment
-        if probability < adjusted_threshold:
-            return {"label": label, "color": color, "adjusted": adjustment > 0}
-            
-    return {"label": "VERY HIGH RISK", "color": "#ef4444", "adjusted": adjustment > 0}
 
-# ── RECALL-FOCUSED OPTIMIZATION PARAMS ───────────────────────────────────────
-EBM_PARAMS = {
-    "learning_rate": 0.02,
-    "max_bins": 256,
-    "interactions": 10,
-    "random_state": RANDOM_STATE,
-}
+def get_risk_level(probability: float) -> dict:
+    """Return risk label and color for a given probability (0–1)."""
+    for threshold, label, color in RISK_LEVELS:
+        if probability < threshold:
+            return {"label": label, "color": color}
+    return {"label": "VERY HIGH RISK", "color": "#ef4444"}
