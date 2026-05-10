@@ -319,6 +319,12 @@ def _validate_input(form_data: dict) -> list[str]:
             errors.append("FICO score must be between 300 and 850.")
     except ValueError:
         errors.append("FICO score is not a valid number.")
+    try:
+        dti = float(form_data.get("dti", 0) or 0)
+        if dti < 0 or dti > 100:
+            errors.append("Debt-to-income ratio must be between 0 and 100.")
+    except ValueError:
+        errors.append("Debt-to-income ratio is not a valid number.")
     return errors
 
 
@@ -400,21 +406,75 @@ def predict():
         fico        = float(form_data.get("fico_range_low", 0) or 0)
         int_rate    = float(form_data.get("int_rate", 0) or 0) / 100.0
 
-        override_triggered = annual_inc > 0 and loan_amount > 5 * annual_inc
+        dti         = float(form_data.get("dti",         0) or 0)
+        delinq      = float(form_data.get("delinq_2yrs", 0) or 0)
+        pub_rec     = float(form_data.get("pub_rec",     0) or 0)
+        revol_util  = float(form_data.get("revol_util",  0) or 0)
+        inq_6m      = float(form_data.get("inq_last_6mths", 0) or 0)
 
-        lgd            = _calculate_lgd(fico)
-        ead            = loan_amount
-        expected_loss  = prob * lgd * ead
+        # ── Business Override Rules (applied before model probability) ────────
+        # These are hard rules based on industry underwriting standards.
+        # A person CAN have high income but still be a default risk due to
+        # poor credit history, excessive debt load, or near-bankruptcy FICO.
+        override_reason = None
+
+        if fico > 0 and fico < 500:
+            # FICO < 500 = near-bankruptcy / severe derogatory history.
+            # No lender approves this regardless of income.
+            override_reason = f"FICO score {int(fico)} is critically low (< 500) — automatic decline"
+
+        elif fico > 0 and fico < 580 and loan_amount > annual_inc * 0.5:
+            # Sub-prime FICO + loan more than 50% of income = very high default risk
+            override_reason = (
+                f"Sub-prime FICO ({int(fico)}) combined with loan amount "
+                f"exceeding 50% of annual income"
+            )
+
+        elif dti > 40:
+            # DTI > 40% means more than 40% of gross income already goes to debt payments.
+            # Most lenders cap at 36-43%.
+            override_reason = f"Debt-to-income ratio {dti:.1f}% exceeds the 40% hard limit"
+
+        elif delinq >= 3:
+            override_reason = f"{int(delinq)} delinquencies in last 2 years — chronic payment failure"
+
+        elif pub_rec >= 2:
+            override_reason = f"{int(pub_rec)} public records (bankruptcies/judgements) on file"
+
+        elif annual_inc > 0 and loan_amount > 5 * annual_inc:
+            override_reason = (
+                f"Loan amount (${loan_amount:,.0f}) exceeds 5× annual income "
+                f"(${annual_inc:,.0f})"
+            )
+
+        override_triggered = override_reason is not None
+
+        lgd             = _calculate_lgd(fico)
+        ead             = loan_amount
+        expected_loss   = prob * lgd * ead
         expected_profit = (loan_amount * (1 - prob) * int_rate) - (loan_amount * prob * lgd)
 
         # ── Risk classification ──────────────────────────────────────────────
+        # Override rules take precedence over model probability.
         if override_triggered:
-            risk_label   = "HIGH RISK (OVERRIDE)"
+            risk_label   = "VERY HIGH RISK (OVERRIDE)"
             verdict      = "Default"
             show_warning = True
         else:
             risk_info    = get_risk_level(prob)
             risk_label_v = risk_info["label"]
+
+            # Soft tighten for sub-prime FICO (500-619) ONLY when income
+            # does NOT comfortably cover the loan (loan > 30% of annual income).
+            # If income is strong relative to loan, trust the model score.
+            # Example: FICO 550, loan $100k, income $500k → loan/income = 20% → NO bump
+            # Example: FICO 550, loan $100k, income $130k → loan/income = 77% → bump to MEDIUM
+            if (fico > 0 and fico < 620
+                    and annual_inc > 0
+                    and loan_amount / annual_inc > 0.30
+                    and risk_label_v == "LOW RISK"):
+                risk_label_v = "MEDIUM RISK"
+
             if risk_label_v == "LOW RISK":
                 risk_label, verdict, show_warning = "LOW RISK", "Repay", False
             elif risk_label_v == "MEDIUM RISK":
@@ -423,13 +483,19 @@ def predict():
                 risk_label, verdict, show_warning = risk_label_v, "Default", True
 
         risk_color_map = {
-            "LOW RISK":              "#22c55e",
-            "MEDIUM RISK":           "#f59e0b",
-            "HIGH RISK":             "#f97316",
-            "HIGH RISK (OVERRIDE)":  "#dc2626",
-            "VERY HIGH RISK":        "#ef4444",
+            "LOW RISK":                    "#22c55e",
+            "MEDIUM RISK":                 "#f59e0b",
+            "HIGH RISK":                   "#f97316",
+            "VERY HIGH RISK":              "#ef4444",
+            "VERY HIGH RISK (OVERRIDE)":   "#dc2626",
         }
-        message   = "Default Risk Detected — Review Recommended" if show_warning else "Safe Borrower — No Immediate Risk"
+        if override_triggered:
+            message = f"⛔ Hard Decline — {override_reason}"
+        elif show_warning:
+            message = "Default Risk Detected — Manual Review Required"
+        else:
+            message = "Safe Borrower — No Immediate Risk"
+
         risk_note = "📌 Credit Invisible — evaluated using alternative data" if fico == 0 else "Standard credit evaluation"
 
         record = {
@@ -440,7 +506,7 @@ def predict():
             "int_rate":         float(form_data.get("int_rate",    0) or 0),
             "installment":      float(form_data.get("installment", 0) or 0),
             "annual_inc":       annual_inc,
-            "dti":              float(form_data.get("dti",         0) or 0),
+            "dti":              dti,
             "fico":             fico,
             "open_acc":         float(form_data.get("open_acc",    0) or 0),
             "revol_bal":        float(form_data.get("revol_bal",   0) or 0),
@@ -461,6 +527,7 @@ def predict():
             "risk_level":       risk_label,
             "show_warning":     show_warning,
             "message":          message,
+            "override_reason":  override_reason,
             "color":            risk_color_map.get(risk_label, "#6b7280"),
             "risk_note":        risk_note,
             "top_features":     explanation,
@@ -506,6 +573,9 @@ def predict():
             lgd             = round(lgd, 2),
             message         = message,
             risk_note       = risk_note,
+            override_reason = override_reason,
+            fico            = fico,
+            dti             = dti,
         )
 
     except Exception as exc:
