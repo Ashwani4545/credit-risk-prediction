@@ -1,15 +1,15 @@
 {
     "model_name": "xgboost",
-    "accuracy": 0.7659,
-    "precision": 0.4172,
-    "recall": 0.4307,
-    "f1_score": 0.4239,
-    "roc_auc": 0.7304,
-    "decision_threshold": 0.344476,
+    "accuracy": 0.7686,
+    "precision": 0.4241,
+    "recall": 0.4397,
+    "f1_score": 0.4318,
+    "roc_auc": 0.7381,
+    "decision_threshold": 0.358066,
     "confusion_matrix": {
-        "tn": 20395,
-        "fp": 3608,
-        "fn": 3414,
-        "tp": 2583
+        "tn": 20422,
+        "fp": 3581,
+        "fn": 3360,
+        "tp": 2637
     }
 }
