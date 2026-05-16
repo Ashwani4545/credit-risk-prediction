@@ -1,4 +1,6 @@
-# Credit Risk Prediction System
+# AegisBank — AI-Based Loan Default Prediction System
+> Predicting loan defaults in real time using XGBoost, 
+  SHAP explainability, drift detection, and a Flask web interface.
 
 An end-to-end machine learning pipeline that predicts the probability a loan applicant will default, using a single **XGBoost** model with SHAP-based explainability and a Flask web UI.
 
